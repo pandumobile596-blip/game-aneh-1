@@ -1,10 +1,13 @@
 (() => {
   "use strict";
 
-  const W = 416;
-  const H = 512;
+  const BASE_W = 416;
+  const BASE_H = 512;
   const GROUND_H = 112;
-  const GROUND_Y = H - GROUND_H;
+  let W = BASE_W;
+  let H = BASE_H;
+  let GROUND_Y = H - GROUND_H;
+  let sceneryReady = false;
 
   const GRAVITY = 0.25;
   const FLAP_V = -4.6;
@@ -19,15 +22,99 @@
   const ctx = canvas.getContext("2d");
   const muteBtn = document.getElementById("muteBtn");
 
-  function resize() {
-    const scale = Math.max(1, Math.ceil(window.devicePixelRatio || 1) * 2);
-    canvas.width = W * scale;
-    canvas.height = H * scale;
-    ctx.setTransform(scale, 0, 0, scale, 0, 0);
-    ctx.imageSmoothingEnabled = true;
+  const wrap = document.getElementById("wrap");
+  const hint = document.querySelector(".hint");
+
+  function isPhoneLayout() {
+    const vv = window.visualViewport;
+    const vw = vv ? vv.width : window.innerWidth;
+    const vh = vv ? vv.height : window.innerHeight;
+    return vw / vh < BASE_W / BASE_H - 0.01;
   }
-  resize();
+
+  function fitFrame() {
+    const phone = isPhoneLayout();
+    document.body.classList.toggle("phone", phone);
+    if (!phone) {
+      wrap.style.top = "";
+      wrap.style.left = "";
+      wrap.style.width = "";
+      wrap.style.height = "";
+      if (hint) hint.style.display = "";
+      return;
+    }
+    const vv = window.visualViewport;
+    const vw = vv ? vv.width : window.innerWidth;
+    const vh = vv ? vv.height : window.innerHeight;
+    wrap.style.top = (vv ? vv.offsetTop : 0) + "px";
+    wrap.style.left = (vv ? vv.offsetLeft : 0) + "px";
+    wrap.style.width = vw + "px";
+    wrap.style.height = vh + "px";
+    if (hint) hint.style.display = "none";
+  }
+
+  function pickScale(h) {
+    let scale = Math.max(1, Math.ceil(window.devicePixelRatio || 1) * 2);
+    while (scale > 1 && BASE_W * scale * h * scale > 2500000) scale -= 1;
+    return scale;
+  }
+
+  function clampScenery() {
+    plankton.forEach((p) => {
+      if (p.y < 0 || p.y > GROUND_Y) p.y = Math.random() * GROUND_Y;
+    });
+    fishes.forEach((f, i) => {
+      if (f.y < 30 || f.y > GROUND_Y - 36) {
+        f.y = GROUND_Y * (0.3 + i * 0.12);
+      }
+    });
+  }
+
+  function syncOkBtn() {
+    okBtn.x = W / 2 - 52;
+    okBtn.y = H <= BASE_H + 8 ? 330 : GROUND_Y * 0.82;
+  }
+
+  function readyLayout() {
+    if (H <= BASE_H + 8) {
+      return { title: 100, ready: 150, name: 200, tap: 300, best: 365, shark: H / 2 - 40 };
+    }
+    const water = GROUND_Y;
+    return {
+      title: water * 0.22,
+      ready: water * 0.34,
+      name: water * 0.46,
+      tap: water * 0.68,
+      best: water * 0.88,
+      shark: water * 0.46,
+    };
+  }
+
+  function resize() {
+    fitFrame();
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width < 2 || rect.height < 2) return;
+    const nextH = Math.max(BASE_H, Math.round(BASE_W * (rect.height / rect.width)));
+    const scale = pickScale(nextH);
+    H = nextH;
+    GROUND_Y = H - GROUND_H;
+    syncOkBtn();
+    if (sceneryReady) clampScenery();
+    const bw = Math.round(W * scale);
+    const bh = Math.round(H * scale);
+    if (canvas.width !== bw || canvas.height !== bh) {
+      canvas.width = bw;
+      canvas.height = bh;
+      ctx.setTransform(scale, 0, 0, scale, 0, 0);
+      ctx.imageSmoothingEnabled = true;
+    }
+  }
   window.addEventListener("resize", resize);
+  window.addEventListener("orientationchange", resize);
+  if (window.visualViewport) {
+    visualViewport.addEventListener("resize", resize);
+    visualViewport.addEventListener("scroll", resize);
+  }
 
   // ---------- Audio ----------
   const audio = {
@@ -111,6 +198,7 @@
   ];
 
   const shark = { x: 110, y: 0, vy: 0, rot: 0, r: 11 };
+  const okBtn = { x: W / 2 - 52, y: 330, w: 104, h: 36 };
 
   let bubbles = [];
   const plankton = Array.from({ length: 45 }, () => ({
@@ -137,7 +225,7 @@
     isNewBest = false;
     pipes = [];
     bubbles = [];
-    shark.y = H / 2 - 40;
+    shark.y = readyLayout().shark;
     shark.vy = 0;
     shark.rot = 0;
     overTimer = 0;
@@ -179,8 +267,6 @@
   }
 
   // ---------- Input ----------
-  const okBtn = { x: W / 2 - 52, y: 330, w: 104, h: 36 };
-
   function toLogical(evt) {
     const rect = canvas.getBoundingClientRect();
     const p = evt.touches ? evt.touches[0] : evt;
@@ -274,7 +360,13 @@
     const moving = state === "ready" || state === "play";
     if (moving) {
       groundX -= SPEED;
-      fishes.forEach((f) => { f.x -= f.s; if (f.x < -20) { f.x = W + 20; f.y = 160 + Math.random() * 200; } });
+      fishes.forEach((f) => {
+        f.x -= f.s;
+        if (f.x < -20) {
+          f.x = W + 20;
+          f.y = 70 + Math.random() * Math.max(80, GROUND_Y * 0.55);
+        }
+      });
       weeds.forEach((w) => { w.x -= SPEED; if (w.x < -10) w.x += W + 30; });
     }
 
@@ -287,7 +379,7 @@
     if (frame % 25 === 0) addBubbles(1, Math.random() * W, GROUND_Y + 4, 2);
 
     if (state === "ready") {
-      shark.y = H / 2 - 40 + Math.sin(frame / 10) * 6;
+      shark.y = readyLayout().shark + Math.sin(frame / 10) * 6;
       shark.rot = Math.sin(frame / 20) * 0.08;
       if (frame % 40 === 0) addBubbles(1, shark.x + 18, shark.y - 2, 2);
       return;
@@ -752,18 +844,19 @@
   }
 
   function drawReady() {
-    text("StupidShark", W / 2, 100, 34, "#ffde59");
-    text("Get Ready!", W / 2, 150, 24, "#7ef0d0");
-    text(SKINS[skin].name, W / 2, 200, 14, "#fff");
+    const ui = readyLayout();
+    text("StupidShark", W / 2, ui.title, 34, "#ffde59");
+    text("Get Ready!", W / 2, ui.ready, 24, "#7ef0d0");
+    text(SKINS[skin].name, W / 2, ui.name, 14, "#fff");
 
-    const y = 300 + Math.sin(frame / 10) * 3;
+    const y = ui.tap + Math.sin(frame / 10) * 3;
     roundRect(W / 2 - 50, y - 20, 100, 40, 10, "rgba(255,255,255,0.8)", "#0b2a3d");
     text("TAP", W / 2, y, 20, "#ff7043", "center", "#fff");
     ctx.fillStyle = "#fff";
     ctx.beginPath();
     ctx.moveTo(W / 2, y - 34); ctx.lineTo(W / 2 - 8, y - 24); ctx.lineTo(W / 2 + 8, y - 24); ctx.closePath();
     ctx.fill();
-    text(`Best: ${best}`, W / 2, 365, 16, "#fff");
+    text(`Best: ${best}`, W / 2, ui.best, 16, "#fff");
   }
 
   function medalFor(s) {
@@ -778,13 +871,16 @@
     const t = Math.min(1, overTimer / 25);
     const ease = 1 - Math.pow(1 - t, 3);
 
-    text("Game Over", W / 2, 120 - (1 - ease) * 30, 36, "#ff8a3d");
+    const tall = H > BASE_H + 8;
+    const titleY = tall ? GROUND_Y * 0.22 : 120;
+    const py = (tall ? GROUND_Y * 0.36 : 170) + (1 - ease) * (tall ? 80 : 300);
+    text("Game Over", W / 2, titleY - (1 - ease) * 30, 36, "#ff8a3d");
+    const panelX = 40;
+    const panelW = W - 80;
+    roundRect(panelX, py, panelW, 116, 8, "#e9f7fb", "#0b2a3d");
+    roundRect(panelX + 6, py + 6, panelW - 12, 104, 6, null, "#8fc9dc");
 
-    const py = 170 + (1 - ease) * 300;
-    roundRect(W / 2 - 113, py, 226, 116, 8, "#e9f7fb", "#0b2a3d");
-    roundRect(W / 2 - 107, py + 6, 214, 104, 6, null, "#8fc9dc");
-
-    text("MEDAL", 64, py + 22, 12, "#1a8fb8", "center", "#fff");
+    text("MEDAL", 92, py + 22, 12, "#1a8fb8", "center", "#fff");
     text("SCORE", W - 64, py + 22, 12, "#1a8fb8", "center", "#fff");
     text("BEST", W - 64, py + 66, 12, "#1a8fb8", "center", "#fff");
 
@@ -799,7 +895,7 @@
     }
 
     const m = medalFor(score);
-    const mx = 64, my = py + 66;
+    const mx = 92, my = py + 66;
     ctx.beginPath(); ctx.arc(mx, my, 24, 0, Math.PI * 2);
     ctx.fillStyle = m ? m.c1 : "#cfe6ee"; ctx.fill();
     if (m) {
@@ -832,7 +928,9 @@
     drawBubbles();
     drawShark();
 
-    if (state === "play" || state === "dying") text(String(score), W / 2, 60, 44);
+    if (state === "play" || state === "dying") {
+      text(String(score), W / 2, H > BASE_H + 8 ? Math.max(64, H * 0.07) : 60, 44);
+    }
     if (state === "ready") drawReady();
     if (state === "over") drawOver();
 
@@ -865,6 +963,8 @@
     requestAnimationFrame(loop);
   }
 
+  sceneryReady = true;
+  resize();
   reset();
   requestAnimationFrame(loop);
 })();
