@@ -15,7 +15,11 @@
   const SPEED = 2;
   const PIPE_W = 52;
   const PIPE_GAP = 100;
-  const PIPE_SPACING = 160;
+  const PIPE_SPACING = 220;
+
+  function worldScale() {
+    return H / BASE_H;
+  }
   const STEP = 1000 / 60;
 
   const canvas = document.getElementById("game");
@@ -234,8 +238,11 @@
   }
 
   function spawnPipe(x) {
-    const minTop = 60;
-    const maxTop = GROUND_Y - PIPE_GAP - 60;
+    const k = worldScale();
+    const gap = PIPE_GAP * k;
+    const margin = 60 * k;
+    const minTop = margin;
+    const maxTop = Math.max(minTop, GROUND_Y - gap - margin);
     const top = minTop + Math.random() * (maxTop - minTop);
     const spots = Array.from({ length: 10 }, () => ({
       dx: 6 + Math.random() * (PIPE_W - 12),
@@ -243,7 +250,7 @@
       r: 2 + Math.random() * 3,
     }));
     const hue = Math.random() < 0.5 ? "#ff7aa8" : "#ff9d5c";
-    pipes.push({ x, top, passed: false, spots, coral: hue });
+    pipes.push({ x, top, gap, passed: false, spots, coral: hue });
   }
 
   function addBubbles(n, x, y, spread = 4) {
@@ -259,11 +266,12 @@
   }
 
   function flap() {
-    shark.vy = FLAP_V;
+    const k = worldScale();
+    shark.vy = FLAP_V * k;
     audio.flap();
-    const tx = shark.x - Math.cos(shark.rot) * 18;
-    const ty = shark.y - Math.sin(shark.rot) * 18;
-    addBubbles(4, tx, ty);
+    const tx = shark.x - Math.cos(shark.rot) * 18 * k;
+    const ty = shark.y - Math.sin(shark.rot) * 18 * k;
+    addBubbles(4, tx, ty, 4 * k);
   }
 
   // ---------- Input ----------
@@ -322,17 +330,19 @@
   // ---------- Update ----------
   // Shark hitbox: two circles along the body axis (head + torso).
   function sharkCircles() {
+    const k = worldScale();
     const c = Math.cos(shark.rot), s = Math.sin(shark.rot);
     return [
-      { x: shark.x + c * 6, y: shark.y + s * 6, r: 9 },
-      { x: shark.x - c * 6, y: shark.y - s * 6, r: 8 },
+      { x: shark.x + c * 6 * k, y: shark.y + s * 6 * k, r: 9 * k },
+      { x: shark.x - c * 6 * k, y: shark.y - s * 6 * k, r: 8 * k },
     ];
   }
 
   function hitTest(p) {
+    const gap = p.gap || PIPE_GAP;
     const rects = [
       { x: p.x, y: 0, w: PIPE_W, h: p.top },
-      { x: p.x, y: p.top + PIPE_GAP, w: PIPE_W, h: GROUND_Y - p.top - PIPE_GAP },
+      { x: p.x, y: p.top + gap, w: PIPE_W, h: GROUND_Y - p.top - gap },
     ];
     return sharkCircles().some((ci) =>
       rects.some((rc) => {
@@ -381,16 +391,17 @@
     if (state === "ready") {
       shark.y = readyLayout().shark + Math.sin(frame / 10) * 6;
       shark.rot = Math.sin(frame / 20) * 0.08;
-      if (frame % 40 === 0) addBubbles(1, shark.x + 18, shark.y - 2, 2);
+      if (frame % 40 === 0) addBubbles(1, shark.x + 18 * worldScale(), shark.y - 2, 2);
       return;
     }
 
     if (state === "play" || state === "dying") {
-      shark.vy = Math.min(shark.vy + GRAVITY, MAX_FALL);
+      const k = worldScale();
+      shark.vy = Math.min(shark.vy + GRAVITY * k, MAX_FALL * k);
       shark.y += shark.vy;
       if (shark.vy < 0) shark.rot = Math.max(-0.45, shark.rot - 0.15);
-      else if (shark.vy > 3) shark.rot = Math.min(Math.PI / 2, shark.rot + 0.08);
-      if (shark.y < -20) { shark.y = -20; shark.vy = 0; }
+      else if (shark.vy > 3 * k) shark.rot = Math.min(Math.PI / 2, shark.rot + 0.08);
+      if (shark.y < -20 * k) { shark.y = -20 * k; shark.vy = 0; }
     }
 
     if (state === "play") {
@@ -408,8 +419,8 @@
       if (last && last.x < W + 40 - PIPE_SPACING) spawnPipe(last.x + PIPE_SPACING);
     }
 
-    if ((state === "play" || state === "dying") && shark.y + shark.r >= GROUND_Y) {
-      shark.y = GROUND_Y - shark.r;
+    if ((state === "play" || state === "dying") && shark.y + shark.r * worldScale() >= GROUND_Y) {
+      shark.y = GROUND_Y - shark.r * worldScale();
       if (state === "play") die();
       gameOver();
     }
@@ -513,7 +524,7 @@
     ctx.strokeRect(x, y, w, h);
   }
 
-  function drawCoralLip(x, y, w, h, color, dir) {
+  function drawCoralLip(x, y, w, h, color, dir, k) {
     // dir: -1 = coral grows upward (bottom pillar), 1 = grows downward (top pillar)
     ctx.fillStyle = color;
     ctx.strokeStyle = "#7a2347";
@@ -523,23 +534,25 @@
     ctx.fill(); ctx.stroke();
 
     const edge = dir === 1 ? y + h : y;
+    const bump = 5 * k;
     ctx.beginPath();
     for (let i = 0; i < 5; i++) {
-      const cx = x + 6 + i * ((w - 12) / 4);
-      ctx.moveTo(cx + 5, edge);
-      ctx.arc(cx, edge, 5, 0, Math.PI * 2);
+      const cx = x + bump + i * ((w - bump * 2) / 4);
+      ctx.moveTo(cx + bump, edge);
+      ctx.arc(cx, edge, bump, 0, Math.PI * 2);
     }
     ctx.fill(); ctx.stroke();
 
     ctx.fillStyle = "rgba(255,255,255,0.35)";
     for (let i = 0; i < 4; i++) {
-      ctx.beginPath(); ctx.arc(x + 8 + i * 12, y + h / 2, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(x + (8 + i * 12) * k, y + h / 2, 2 * k, 0, Math.PI * 2); ctx.fill();
     }
   }
 
   function drawPipe(p) {
-    const lipH = 16, lipOver = 3;
-    const bottomY = p.top + PIPE_GAP;
+    const k = (p.gap || PIPE_GAP) / PIPE_GAP;
+    const lipH = 16 * k, lipOver = 3 * k;
+    const bottomY = p.top + (p.gap || PIPE_GAP);
     drawRock(p.x, -2, PIPE_W, p.top - lipH + 2, p, false);
     drawRock(p.x, bottomY + lipH, PIPE_W, GROUND_Y - bottomY - lipH, p, true);
 
@@ -555,8 +568,8 @@
       ctx.stroke();
     }
 
-    drawCoralLip(p.x - lipOver, p.top - lipH, PIPE_W + lipOver * 2, lipH, p.coral, 1);
-    drawCoralLip(p.x - lipOver, bottomY, PIPE_W + lipOver * 2, lipH, p.coral, -1);
+    drawCoralLip(p.x - lipOver, p.top - lipH, PIPE_W + lipOver * 2, lipH, p.coral, 1, k);
+    drawCoralLip(p.x - lipOver, bottomY, PIPE_W + lipOver * 2, lipH, p.coral, -1, k);
   }
 
   function drawGround() {
@@ -653,6 +666,7 @@
     ctx.save();
     ctx.translate(shark.x, shark.y);
     ctx.rotate(shark.rot);
+    ctx.scale(worldScale(), worldScale());
     ctx.lineWidth = 1.5;
     ctx.strokeStyle = "#1b2433";
     ctx.lineJoin = "round";
