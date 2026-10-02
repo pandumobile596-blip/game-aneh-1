@@ -1,13 +1,14 @@
-Water splashes
+Underwater bubbles (bubble-0.ogg, bubble-1.ogg, bubble-pop.ogg)
 Author: rubberduck
 https://opengameart.org/content/40-cc0-water-splash-slime-sfx
 License: Creative Commons Zero (CC0)
 https://creativecommons.org/publicdomain/zero/1.0/
 
-Reward coin sounds
-RPG Audio by Kenney (www.kenney.nl)
+Underwater bubble (bubble-2.wav)
+Author: Brian MacIntosh
+https://opengameart.org/content/bubble-sound-effects
 License: Creative Commons Zero (CC0)
-Credit to Kenney or www.kenney.nl is appreciated and not required.
+Credit is optional.
 
 omg.mp3
 "OM..G!" in a high-pitched voice, by willy_ineedthatapp_com

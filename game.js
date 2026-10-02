@@ -120,11 +120,11 @@
     visualViewport.addEventListener("scroll", resize);
   }
 
-  // Water splashes: rubberduck, CC0. Reward coins: Kenney RPG Audio, CC0.
+  // Underwater bubbles, CC0. Swim is one glub; a pipe is two rising bubbles.
   // Crash voice stays the CC0 "OMG" clip.
   const SFX = {
-    flap: ["sfx/water-0.ogg", "sfx/water-1.ogg", "sfx/water-2.ogg", "sfx/water-3.ogg", "sfx/water-4.ogg"],
-    point: ["sfx/reward-0.ogg", "sfx/reward-1.ogg"],
+    flap: ["sfx/bubble-0.ogg", "sfx/bubble-1.ogg", "sfx/bubble-2.wav"],
+    point: ["sfx/bubble-pop.ogg"],
     omg: ["sfx/omg.mp3"],
   };
   const sfxRaw = {};
@@ -166,11 +166,27 @@
         const raws = await sfxRaw[name];
         this.buffers[name] = [];
         for (const raw of raws) {
-          this.buffers[name].push(await this.ctx.decodeAudioData(raw.slice(0)));
+          const buf = await this.ctx.decodeAudioData(raw.slice(0));
+          if (name !== "omg") this.normalize(buf, 0.92);
+          this.buffers[name].push(buf);
         }
       }
     },
-    play(name, gain, rate, vary, maxDur) {
+    normalize(buf, target) {
+      let peak = 0;
+      for (let c = 0; c < buf.numberOfChannels; c++) {
+        const data = buf.getChannelData(c);
+        for (let i = 0; i < data.length; i++) peak = Math.max(peak, Math.abs(data[i]));
+      }
+      if (peak < 0.001) return;
+      const g = target / peak;
+      if (g > 0.98 && g < 1.02) return;
+      for (let c = 0; c < buf.numberOfChannels; c++) {
+        const data = buf.getChannelData(c);
+        for (let i = 0; i < data.length; i++) data[i] *= g;
+      }
+    },
+    play(name, gain, rate, vary, maxDur, delay) {
       if (this.muted) return;
       this.init().then(() => {
         if (this.muted || !this.ctx) return;
@@ -184,7 +200,7 @@
         const playback = rate * (1 + (Math.random() * 2 - 1) * vary);
         src.playbackRate.value = playback;
         const g = this.ctx.createGain();
-        const now = this.ctx.currentTime;
+        const now = this.ctx.currentTime + (delay || 0);
         const heard = Math.min(src.buffer.duration, maxDur);
         const stopAt = now + heard / playback;
         g.gain.setValueAtTime(gain, now);
@@ -195,10 +211,13 @@
         src.stop(stopAt + 0.02);
       }).catch(() => {});
     },
-    flap() { this.play("flap", 1, 1, 0.04, 0.56); },
-    point() { this.play("point", 1, 1, 0.03, 0.9); },
+    flap() { this.play("flap", 1, 0.96, 0.03, 0.55); },
+    point() {
+      this.play("point", 1, 0.94, 0.015, 0.42, 0);
+      this.play("point", 1, 1.16, 0.015, 0.38, 0.13);
+    },
     omg() { this.play("omg", 1, 1, 0, 1.8); },
-    swoosh() { this.play("flap", 1, 0.96, 0.03, 0.4); },
+    swoosh() { this.play("flap", 1, 0.9, 0.02, 0.5); },
   };
 
   function updateMuteBtn() { muteBtn.textContent = audio.muted ? "🔇" : "🔊"; }
