@@ -188,6 +188,7 @@
   let isNewBest = false;
   let groundX = 0;
   let pipes = [];
+  let lastOpening = null;
   let flash = 0;
   let shake = 0;
   let overTimer = 0;
@@ -223,11 +224,20 @@
     p: Math.random() * 6,
   }));
 
+  function difficulty() {
+    return Math.min(1, score / 22);
+  }
+
+  function scrollSpeed() {
+    return SPEED + difficulty() * 0.55;
+  }
+
   function reset() {
     state = "ready";
     score = 0;
     isNewBest = false;
     pipes = [];
+    lastOpening = null;
     bubbles = [];
     shark.y = readyLayout().shark;
     shark.vy = 0;
@@ -239,11 +249,20 @@
 
   function spawnPipe(x) {
     const k = worldScale();
-    const gap = PIPE_GAP * k;
-    const margin = 60 * k;
-    const minTop = margin;
-    const maxTop = Math.max(minTop, GROUND_Y - gap - margin);
-    const top = minTop + Math.random() * (maxTop - minTop);
+    const t = difficulty();
+    const gap = (PIPE_GAP - t * 22) * k;
+    const margin = (72 - t * 18) * k;
+    const minCenter = margin + gap / 2;
+    const maxCenter = GROUND_Y - margin - gap / 2;
+    let center = minCenter + Math.random() * Math.max(0, maxCenter - minCenter);
+    if (lastOpening != null && maxCenter > minCenter) {
+      const reach = (90 + t * 40) * k;
+      const lo = Math.max(minCenter, lastOpening - reach);
+      const hi = Math.min(maxCenter, lastOpening + reach);
+      center = lo + Math.random() * Math.max(0, hi - lo);
+    }
+    lastOpening = center;
+    const top = center - gap / 2;
     const spots = Array.from({ length: 10 }, () => ({
       dx: 6 + Math.random() * (PIPE_W - 12),
       dy: Math.random(),
@@ -368,8 +387,9 @@
     if (shake > 0) shake--;
 
     const moving = state === "ready" || state === "play";
+    const flow = scrollSpeed();
     if (moving) {
-      groundX -= SPEED;
+      groundX -= flow;
       fishes.forEach((f) => {
         f.x -= f.s;
         if (f.x < -20) {
@@ -377,12 +397,12 @@
           f.y = 70 + Math.random() * Math.max(80, GROUND_Y * 0.55);
         }
       });
-      weeds.forEach((w) => { w.x -= SPEED; if (w.x < -10) w.x += W + 30; });
+      weeds.forEach((w) => { w.x -= flow; if (w.x < -10) w.x += W + 30; });
     }
 
     for (const b of bubbles) {
       b.y += b.vy;
-      b.x += Math.sin((frame + b.y) / 10) * 0.3 - (moving ? SPEED * 0.5 : 0);
+      b.x += Math.sin((frame + b.y) / 10) * 0.3 - (moving ? flow * 0.5 : 0);
       b.life--;
     }
     bubbles = bubbles.filter((b) => b.life > 0 && b.y > -10);
@@ -405,8 +425,9 @@
     }
 
     if (state === "play") {
+      const spacing = PIPE_SPACING - difficulty() * 46;
       for (const p of pipes) {
-        p.x -= SPEED;
+        p.x -= flow;
         if (!p.passed && p.x + PIPE_W < shark.x) {
           p.passed = true;
           score++;
@@ -416,7 +437,7 @@
       }
       if (pipes.length && pipes[0].x < -PIPE_W - 10) pipes.shift();
       const last = pipes[pipes.length - 1];
-      if (last && last.x < W + 40 - PIPE_SPACING) spawnPipe(last.x + PIPE_SPACING);
+      if (last && last.x < W + 40 - spacing) spawnPipe(last.x + spacing);
     }
 
     if ((state === "play" || state === "dying") && shark.y + shark.r * worldScale() >= GROUND_Y) {
