@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const W = 288;
+  const W = 416;
   const H = 512;
   const GROUND_H = 112;
   const GROUND_Y = H - GROUND_H;
@@ -110,7 +110,7 @@
     { name: "Hiu Neon", body: "#1fb5a5", dark: "#0f7d72", belly: "#e4fffb", gear: "glow" },
   ];
 
-  const shark = { x: 72, y: 0, vy: 0, rot: 0, r: 11 };
+  const shark = { x: 110, y: 0, vy: 0, rot: 0, r: 11 };
 
   let bubbles = [];
   const plankton = Array.from({ length: 45 }, () => ({
@@ -125,7 +125,7 @@
     s: 0.25 + Math.random() * 0.35,
     size: 5 + Math.random() * 4,
   }));
-  const weeds = Array.from({ length: 9 }, (_, i) => ({
+  const weeds = Array.from({ length: Math.ceil(W / 36) }, (_, i) => ({
     x: i * 36 + Math.random() * 14,
     h: 18 + Math.random() * 22,
     p: Math.random() * 6,
@@ -348,7 +348,7 @@
       // sunlight rays
       ctx.save();
       ctx.globalCompositeOperation = "lighter";
-      for (let i = 0; i < 5; i++) {
+      for (let i = 0; i < Math.ceil(W / 60); i++) {
         const x = 30 + i * 60 + Math.sin(frame / 90 + i) * 12;
         const rg = ctx.createLinearGradient(0, 0, 0, GROUND_Y * 0.8);
         rg.addColorStop(0, "rgba(255,255,255,0.14)");

@@ -21,8 +21,8 @@ body {
 
 #wrap {
   position: relative;
-  height: min(92vh, 177.7vw);
-  aspect-ratio: 288 / 512;
+  height: min(92vh, 123vw);
+  aspect-ratio: 416 / 512;
 }
 
 #game {
