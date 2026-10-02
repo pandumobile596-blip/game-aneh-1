@@ -120,55 +120,87 @@
     visualViewport.addEventListener("scroll", resize);
   }
 
-  // ---------- Audio ----------
+  // ---------- Audio (Kenney Sci-Fi Sounds, CC0) ----------
+  const SFX = {
+    flap: ["sfx/flap-0.ogg", "sfx/flap-1.ogg", "sfx/flap-2.ogg", "sfx/flap-3.ogg", "sfx/flap-4.ogg"],
+    point: ["sfx/point-0.ogg", "sfx/point-1.ogg", "sfx/point-2.ogg"],
+    hit: ["sfx/hit-0.ogg", "sfx/hit-1.ogg", "sfx/hit-2.ogg"],
+    die: ["sfx/die-0.ogg", "sfx/die-1.ogg"],
+    swoosh: ["sfx/swoosh-0.ogg", "sfx/swoosh-1.ogg"],
+  };
+  const sfxRaw = {};
+  for (const name of Object.keys(SFX)) {
+    sfxRaw[name] = Promise.all(SFX[name].map((url) => fetch(url).then((r) => {
+      if (!r.ok) throw new Error(url);
+      return r.arrayBuffer();
+    })));
+  }
+
   const audio = {
     ctx: null,
+    master: null,
     muted: localStorage.getItem("fs_muted") === "1",
+    buffers: {},
+    last: {},
+    ready: null,
     init() {
       if (!this.ctx) {
         const AC = window.AudioContext || window.webkitAudioContext;
-        if (AC) this.ctx = new AC();
+        if (!AC) return Promise.resolve();
+        this.ctx = new AC();
+        this.master = this.ctx.createGain();
+        this.master.gain.value = 1;
+        const comp = this.ctx.createDynamicsCompressor();
+        comp.threshold.value = -8;
+        comp.knee.value = 8;
+        comp.ratio.value = 3;
+        comp.attack.value = 0.003;
+        comp.release.value = 0.12;
+        this.master.connect(comp).connect(this.ctx.destination);
+        this.ready = this.decode();
       }
-      if (this.ctx && this.ctx.state === "suspended") this.ctx.resume();
+      if (this.ctx.state === "suspended") this.ctx.resume();
+      return this.ready || Promise.resolve();
     },
-    tone(freq, dur, type = "square", vol = 0.15, slideTo = null, delay = 0) {
-      if (this.muted || !this.ctx) return;
-      const t = this.ctx.currentTime + delay;
-      const o = this.ctx.createOscillator();
-      const g = this.ctx.createGain();
-      o.type = type;
-      o.frequency.setValueAtTime(freq, t);
-      if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
-      g.gain.setValueAtTime(vol, t);
-      g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-      o.connect(g).connect(this.ctx.destination);
-      o.start(t);
-      o.stop(t + dur);
+    async decode() {
+      for (const name of Object.keys(SFX)) {
+        const raws = await sfxRaw[name];
+        this.buffers[name] = [];
+        for (const raw of raws) {
+          this.buffers[name].push(await this.ctx.decodeAudioData(raw.slice(0)));
+        }
+      }
     },
-    noise(dur, vol = 0.3) {
-      if (this.muted || !this.ctx) return;
-      const len = Math.floor(this.ctx.sampleRate * dur);
-      const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
-      const data = buf.getChannelData(0);
-      for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len);
-      const src = this.ctx.createBufferSource();
-      const g = this.ctx.createGain();
-      const f = this.ctx.createBiquadFilter();
-      f.type = "lowpass";
-      f.frequency.value = 900;
-      g.gain.value = vol;
-      src.buffer = buf;
-      src.connect(f).connect(g).connect(this.ctx.destination);
-      src.start();
+    play(name, gain, rate, vary, maxDur) {
+      if (this.muted) return;
+      this.init().then(() => {
+        if (this.muted || !this.ctx) return;
+        const list = this.buffers[name];
+        if (!list || !list.length) return;
+        let i = Math.floor(Math.random() * list.length);
+        if (list.length > 1 && i === this.last[name]) i = (i + 1) % list.length;
+        this.last[name] = i;
+        const src = this.ctx.createBufferSource();
+        src.buffer = list[i];
+        const playback = rate * (1 + (Math.random() * 2 - 1) * vary);
+        src.playbackRate.value = playback;
+        const g = this.ctx.createGain();
+        const now = this.ctx.currentTime;
+        const heard = Math.min(src.buffer.duration, maxDur);
+        const stopAt = now + heard / playback;
+        g.gain.setValueAtTime(gain, now);
+        g.gain.setValueAtTime(gain, Math.max(now, stopAt - 0.05));
+        g.gain.linearRampToValueAtTime(0.001, stopAt);
+        src.connect(g).connect(this.master);
+        src.start(now);
+        src.stop(stopAt + 0.02);
+      }).catch(() => {});
     },
-    flap() {
-      this.tone(260, 0.08, "sine", 0.25, 620);
-      this.tone(420, 0.06, "sine", 0.12, 900, 0.04);
-    },
-    point() { this.tone(880, 0.08, "triangle", 0.15); this.tone(1320, 0.2, "triangle", 0.15, null, 0.08); },
-    hit() { this.noise(0.25, 0.5); this.tone(140, 0.2, "sine", 0.3, 60); },
-    die() { this.tone(500, 0.6, "sine", 0.12, 90, 0.15); },
-    swoosh() { this.tone(200, 0.3, "sine", 0.1, 700); },
+    flap() { this.play("flap", 0.95, 1.05, 0.16, 0.24); },
+    point() { this.play("point", 0.82, 1.25, 0.1, 0.4); },
+    hit() { this.play("hit", 0.9, 1, 0.08, 0.34); },
+    die() { this.play("die", 1, 0.9, 0.06, 0.7); },
+    swoosh() { this.play("swoosh", 0.78, 1.12, 0.12, 0.48); },
   };
 
   function updateMuteBtn() { muteBtn.textContent = audio.muted ? "🔇" : "🔊"; }
