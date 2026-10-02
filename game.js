@@ -125,7 +125,7 @@
     flap: ["sfx/flap-0.ogg", "sfx/flap-1.ogg", "sfx/flap-2.ogg", "sfx/flap-3.ogg", "sfx/flap-4.ogg"],
     point: ["sfx/point-0.ogg", "sfx/point-1.ogg", "sfx/point-2.ogg"],
     hit: ["sfx/hit-0.ogg", "sfx/hit-1.ogg", "sfx/hit-2.ogg"],
-    die: ["sfx/die-0.ogg", "sfx/die-1.ogg"],
+    omg: ["sfx/omg.mp3"],
     swoosh: ["sfx/swoosh-0.ogg", "sfx/swoosh-1.ogg"],
   };
   const sfxRaw = {};
@@ -199,7 +199,7 @@
     flap() { this.play("flap", 0.95, 1.05, 0.16, 0.24); },
     point() { this.play("point", 0.82, 1.25, 0.1, 0.4); },
     hit() { this.play("hit", 0.9, 1, 0.08, 0.34); },
-    die() { this.play("die", 1, 0.9, 0.06, 0.7); },
+    omg() { this.play("omg", 1, 1, 0, 1.8); },
     swoosh() { this.play("swoosh", 0.78, 1.12, 0.12, 0.48); },
   };
 
@@ -414,8 +414,7 @@
     state = "dying";
     flash = 10;
     shake = 12;
-    audio.hit();
-    audio.die();
+    audio.omg();
     addBubbles(12, shark.x, shark.y, 16);
   }
 
@@ -495,7 +494,6 @@
       isNewBest = true;
       localStorage.setItem("fs_best", String(best));
     }
-    audio.swoosh();
   }
 
   // ---------- Drawing ----------
