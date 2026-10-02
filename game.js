@@ -200,6 +200,12 @@
     { name: "Hiu Ninja", body: "#7a7f94", dark: "#4d5266", belly: "#f2f2f5", gear: "headband" },
     { name: "Hiu Raja", body: "#6c5bb8", dark: "#463a8a", belly: "#f3efff", gear: "crown" },
     { name: "Hiu Neon", body: "#1fb5a5", dark: "#0f7d72", belly: "#e4fffb", gear: "glow" },
+    { name: "Hiu Bajak", body: "#3e4a57", dark: "#222a33", belly: "#eceff1", gear: "bandana" },
+    { name: "Hiu Robot", body: "#90a4ae", dark: "#546e7a", belly: "#f7f9fa", gear: "visor" },
+    { name: "Hiu Api", body: "#ef6c00", dark: "#bf360c", belly: "#ffe0b2", gear: "flame" },
+    { name: "Hiu Es", body: "#81d4fa", dark: "#0277bd", belly: "#f5fdff", gear: "crystal" },
+    { name: "Hiu Koki", body: "#f5f0e6", dark: "#b7aa96", belly: "#fffdf8", gear: "toque" },
+    { name: "Hiu Galaksi", body: "#6a3ec8", dark: "#3d2380", belly: "#e1d5f5", gear: "planet" },
   ];
 
   const shark = { x: 110, y: 0, vy: 0, rot: 0, r: 11 };
@@ -692,8 +698,8 @@
     ctx.strokeStyle = "#1b2433";
     ctx.lineJoin = "round";
 
-    if (s.gear === "glow") {
-      ctx.shadowColor = "#5fffe9";
+    if (s.gear === "glow" || s.gear === "planet") {
+      ctx.shadowColor = s.gear === "glow" ? "#5fffe9" : "#d1b3ff";
       ctx.shadowBlur = 14;
     }
 
@@ -747,6 +753,20 @@
       ctx.moveTo(-12, -1); ctx.quadraticCurveTo(0, -6, 14, -4);
       ctx.stroke();
       ctx.strokeStyle = "#1b2433";
+    } else if (s.gear === "planet") {
+      ctx.fillStyle = "#fff59d";
+      [[-8, -2], [1, 3], [7, -5]].forEach(([sx, sy]) => ctx.fillRect(sx, sy, 1.5, 1.5));
+    } else if (s.gear === "visor") {
+      ctx.strokeStyle = "#78909c";
+      ctx.beginPath();
+      ctx.moveTo(-10, -3); ctx.lineTo(-3, -3); ctx.lineTo(-5, 3);
+      ctx.stroke();
+      ctx.strokeStyle = "#1b2433";
+    } else if (s.gear === "crystal") {
+      ctx.fillStyle = "rgba(255,255,255,0.75)";
+      ctx.beginPath();
+      ctx.ellipse(-4, -4, 3.2, 1.2, -0.5, 0, Math.PI * 2);
+      ctx.fill();
     }
 
     // gills
@@ -851,6 +871,79 @@
       ctx.fillStyle = "#e53935";
       ctx.beginPath(); ctx.arc(0, -2, 1.2, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
+    } else if (gear === "bandana") {
+      ctx.fillStyle = "#e53935";
+      ctx.beginPath();
+      ctx.moveTo(-1, -9); ctx.quadraticCurveTo(8, -15, 18, -6);
+      ctx.lineTo(16, -3); ctx.quadraticCurveTo(8, -9, 1, -6);
+      ctx.closePath();
+      ctx.fill(); ctx.stroke();
+      const flutter = state === "play" || state === "ready" ? Math.sin(frame / 3) * 2 : 2;
+      ctx.beginPath();
+      ctx.moveTo(-1, -8); ctx.lineTo(-8, -13 + flutter); ctx.lineTo(-5, -6);
+      ctx.closePath();
+      ctx.fill(); ctx.stroke();
+      ctx.fillStyle = "#1b2433";
+      ctx.beginPath();
+      ctx.ellipse(10.5, -3.5, 4.4, 3.5, -0.3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(5, -7); ctx.lineTo(16, 1);
+      ctx.stroke();
+      ctx.fillStyle = "#ffd54f";
+      ctx.beginPath(); ctx.arc(16, 2, 1.1, 0, Math.PI * 2); ctx.fill();
+    } else if (gear === "visor") {
+      ctx.fillStyle = "#81d4fa";
+      ctx.strokeStyle = "#37474f";
+      ctx.beginPath();
+      ctx.rect(6.5, -7, 8.5, 6);
+      ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = "#cfd8dc";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(9, -11); ctx.lineTo(9, -16);
+      ctx.stroke();
+      ctx.fillStyle = frame % 28 < 14 ? "#ff5252" : "#69f0ae";
+      ctx.beginPath(); ctx.arc(9, -16.6, 1.5, 0, Math.PI * 2); ctx.fill();
+    } else if (gear === "flame") {
+      const flick = Math.sin(frame / 3);
+      ctx.strokeStyle = "#e65100";
+      for (let i = 0; i < 3; i++) {
+        const x = -4 + i * 4.5;
+        const h = (i === 1 ? 12 : 8) + flick * (i === 1 ? 2 : 1);
+        ctx.fillStyle = i === 1 ? "#fff176" : "#ff9800";
+        ctx.beginPath();
+        ctx.moveTo(x, -11);
+        ctx.quadraticCurveTo(x + 3, -11 - h, x + 6, -11);
+        ctx.quadraticCurveTo(x + 3, -15, x, -11);
+        ctx.fill(); ctx.stroke();
+      }
+    } else if (gear === "crystal") {
+      ctx.fillStyle = "#e0f7fa";
+      ctx.strokeStyle = "#00acc1";
+      ctx.beginPath();
+      ctx.moveTo(7, -10); ctx.lineTo(10, -19); ctx.lineTo(14, -10);
+      ctx.closePath();
+      ctx.fill(); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(3, -9); ctx.lineTo(5.5, -15); ctx.lineTo(8, -9);
+      ctx.closePath();
+      ctx.fill(); ctx.stroke();
+    } else if (gear === "toque") {
+      ctx.fillStyle = "#fff";
+      ctx.beginPath();
+      ctx.ellipse(7, -15, 7, 4.5, 0, Math.PI, 0);
+      ctx.lineTo(14, -12); ctx.lineTo(0, -12);
+      ctx.closePath();
+      ctx.fill(); ctx.stroke();
+      ctx.fillRect(1.5, -13, 11, 4);
+      ctx.strokeRect(1.5, -13, 11, 4);
+    } else if (gear === "planet") {
+      ctx.fillStyle = "#7e57c2";
+      ctx.beginPath(); ctx.arc(8, -16, 3.3, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = "#ffe082";
+      ctx.beginPath(); ctx.ellipse(8, -16, 6.2, 2.1, 0.6, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = "#1b2433";
     }
   }
 
