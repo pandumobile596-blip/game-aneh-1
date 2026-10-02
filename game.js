@@ -120,13 +120,12 @@
     visualViewport.addEventListener("scroll", resize);
   }
 
-  // ---------- Audio (Kenney Sci-Fi Sounds, CC0) ----------
+  // Water splashes: rubberduck, CC0. Reward coins: Kenney RPG Audio, CC0.
+  // Crash voice stays the CC0 "OMG" clip.
   const SFX = {
-    flap: ["sfx/flap-0.ogg", "sfx/flap-1.ogg", "sfx/flap-2.ogg", "sfx/flap-3.ogg", "sfx/flap-4.ogg"],
-    point: ["sfx/point-0.ogg", "sfx/point-1.ogg", "sfx/point-2.ogg"],
-    hit: ["sfx/hit-0.ogg", "sfx/hit-1.ogg", "sfx/hit-2.ogg"],
+    flap: ["sfx/water-0.ogg", "sfx/water-1.ogg", "sfx/water-2.ogg", "sfx/water-3.ogg", "sfx/water-4.ogg"],
+    point: ["sfx/reward-0.ogg", "sfx/reward-1.ogg"],
     omg: ["sfx/omg.mp3"],
-    swoosh: ["sfx/swoosh-0.ogg", "sfx/swoosh-1.ogg"],
   };
   const sfxRaw = {};
   for (const name of Object.keys(SFX)) {
@@ -149,7 +148,7 @@
         if (!AC) return Promise.resolve();
         this.ctx = new AC();
         this.master = this.ctx.createGain();
-        this.master.gain.value = 1;
+        this.master.gain.value = 1.35;
         const comp = this.ctx.createDynamicsCompressor();
         comp.threshold.value = -8;
         comp.knee.value = 8;
@@ -196,11 +195,10 @@
         src.stop(stopAt + 0.02);
       }).catch(() => {});
     },
-    flap() { this.play("flap", 0.95, 1.05, 0.16, 0.24); },
-    point() { this.play("point", 0.82, 1.25, 0.1, 0.4); },
-    hit() { this.play("hit", 0.9, 1, 0.08, 0.34); },
+    flap() { this.play("flap", 1, 1, 0.04, 0.56); },
+    point() { this.play("point", 1, 1, 0.03, 0.9); },
     omg() { this.play("omg", 1, 1, 0, 1.8); },
-    swoosh() { this.play("swoosh", 0.78, 1.12, 0.12, 0.48); },
+    swoosh() { this.play("flap", 1, 0.96, 0.03, 0.4); },
   };
 
   function updateMuteBtn() { muteBtn.textContent = audio.muted ? "🔇" : "🔊"; }

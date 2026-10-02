@@ -1,10 +1,12 @@
-Sci-Fi Sounds (1.0)
-Created by Kenney (www.kenney.nl)
-
+Water splashes
+Author: rubberduck
+https://opengameart.org/content/40-cc0-water-splash-slime-sfx
 License: Creative Commons Zero (CC0)
 https://creativecommons.org/publicdomain/zero/1.0/
 
-These effects are free to use in personal, educational, and commercial projects.
+Reward coin sounds
+RPG Audio by Kenney (www.kenney.nl)
+License: Creative Commons Zero (CC0)
 Credit to Kenney or www.kenney.nl is appreciated and not required.
 
 omg.mp3
