@@ -324,7 +324,7 @@
     const climb = (v * v) / (2 * g);
     const frames = pipeSpacing() / scrollSpeed();
     const taps = Math.max(2, frames / 16);
-    const reach = climb * taps * (0.28 + difficulty() * 0.12);
+    const reach = climb * taps * (0.4 + difficulty() * 0.16);
     let center = topMin + gap / 2 + Math.random() * Math.max(0, topMax - topMin);
     if (lastOpening != null) {
       const lo = Math.max(topMin + gap / 2, lastOpening - reach);
@@ -356,7 +356,7 @@
 
   function flap() {
     const k = worldScale();
-    shark.boost = 7;
+    shark.vy = FLAP_V * k;
     audio.flap();
     const tx = shark.x - Math.cos(shark.rot) * 18 * k;
     const ty = shark.y - Math.sin(shark.rot) * 18 * k;
@@ -487,16 +487,10 @@
 
     if (state === "play" || state === "dying") {
       const k = worldScale();
-      const lift = FLAP_V * k;
-      if (shark.boost > 0) {
-        shark.vy += (lift - shark.vy) * 0.42;
-        shark.boost--;
-      } else {
-        shark.vy = Math.min(shark.vy + GRAVITY * k, MAX_FALL * k);
-      }
+      shark.vy = Math.min(shark.vy + GRAVITY * k, MAX_FALL * k);
       shark.y += shark.vy;
-      const nose = shark.vy < 0.4 * k ? -0.5 : Math.min(1.15, shark.vy / (MAX_FALL * k) * 1.15);
-      shark.rot += (nose - shark.rot) * 0.14;
+      const nose = shark.vy < 0 ? -0.45 : Math.min(1.05, shark.vy / (MAX_FALL * k) * 1.05);
+      shark.rot += (nose - shark.rot) * 0.22;
       if (shark.y < -20 * k) { shark.y = -20 * k; shark.vy = 0; }
     }
 
