@@ -14,9 +14,9 @@
   const PIPE_W = Math.round(BASE_W * 0.15);
   const PIPE_GAP = Math.round(BASE_H * 0.30);
   const PIPE_SPACING = Math.round(BASE_W * 0.55);
-  const GRAVITY = 0.22;
-  const FLAP_V = -5.6;
-  const MAX_FALL = 6.2;
+  const GRAVITY = 0.3;
+  const FLAP_V = -6.2;
+  const MAX_FALL = 7;
   const SPEED = BASE_W / 155;
 
   function worldScale() {
@@ -350,8 +350,7 @@
 
   function flap() {
     const k = worldScale();
-    const lift = FLAP_V * k;
-    shark.vy = Math.max(lift * 1.3, Math.min(shark.vy, 0) * 0.15 + lift);
+    shark.vy = FLAP_V * k;
     audio.flap();
     const tx = shark.x - Math.cos(shark.rot) * 18 * k;
     const ty = shark.y - Math.sin(shark.rot) * 18 * k;
@@ -484,8 +483,10 @@
       const k = worldScale();
       shark.vy = Math.min(shark.vy + GRAVITY * k, MAX_FALL * k);
       shark.y += shark.vy;
-      if (shark.vy < 0) shark.rot = Math.max(-0.45, shark.rot - 0.15);
-      else if (shark.vy > 3 * k) shark.rot = Math.min(Math.PI / 2, shark.rot + 0.08);
+      const lift = FLAP_V * k;
+      shark.rot = shark.vy < 0
+        ? -0.75 * (shark.vy / lift)
+        : Math.min(1.2, shark.vy / (MAX_FALL * k) * 1.2);
       if (shark.y < -20 * k) { shark.y = -20 * k; shark.vy = 0; }
     }
 
