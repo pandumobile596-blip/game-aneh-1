@@ -10,16 +10,14 @@
   let GROUND_Y = Math.round(H * GROUND_RATIO);
   let sceneryReady = false;
 
-  // Same ratios as Flappy Bird, on laptop and on a tall phone.
-  // One flap still climbs about 40% of the opening, in the same time.
-  const PIPE_W = Math.round(BASE_W * 0.18);
-  const PIPE_GAP = Math.round(BASE_H * 0.27);
-  const PIPE_SPACING = Math.round(BASE_W * 0.5);
-  const GAP_K = PIPE_GAP / 100;
-  const GRAVITY = 0.25 * GAP_K;
-  const FLAP_V = -4.5 * GAP_K;
-  const MAX_FALL = 5 * GAP_K;
-  const SPEED = BASE_W / 144;
+  // Flappy-style hop. Gap starts roomy and tightens a little with the score.
+  const PIPE_W = Math.round(BASE_W * 0.15);
+  const PIPE_GAP = Math.round(BASE_H * 0.30);
+  const PIPE_SPACING = Math.round(BASE_W * 0.55);
+  const GRAVITY = 0.22;
+  const FLAP_V = -5.6;
+  const MAX_FALL = 6.2;
+  const SPEED = BASE_W / 155;
 
   function worldScale() {
     return H / BASE_H;
@@ -240,6 +238,7 @@
   let groundX = 0;
   let pipes = [];
   let flash = 0;
+  let lastOpening = null;
   let shake = 0;
   let overTimer = 0;
   let deep = false;
@@ -280,8 +279,17 @@
     p: Math.random() * 6,
   }));
 
+  function difficulty() {
+    return Math.min(1, score / 18);
+  }
+
   function scrollSpeed() {
-    return SPEED;
+    return SPEED * (1 + difficulty() * 0.2);
+  }
+
+  function gapSize() {
+    const k = worldScale();
+    return (PIPE_GAP - difficulty() * 26) * k;
   }
 
   function reset() {
@@ -289,6 +297,7 @@
     score = 0;
     isNewBest = false;
     pipes = [];
+    lastOpening = null;
     bubbles = [];
     shark.y = readyLayout().shark;
     shark.vy = 0;
@@ -300,10 +309,24 @@
 
   function spawnPipe(x) {
     const k = worldScale();
-    const gap = PIPE_GAP * k;
-    const topMin = 36 * k;
-    const topMax = GROUND_Y - gap - 40 * k;
-    const top = topMin + Math.random() * Math.max(0, topMax - topMin);
+    const gap = gapSize();
+    const margin = 32 * k;
+    const topMin = margin;
+    const topMax = Math.max(topMin, GROUND_Y - gap - margin);
+    const v = Math.abs(FLAP_V) * k;
+    const g = GRAVITY * k;
+    const climb = (v * v) / (2 * g);
+    const frames = PIPE_SPACING / scrollSpeed();
+    const taps = Math.max(2, frames / 16);
+    const reach = climb * taps * (0.4 + difficulty() * 0.16);
+    let center = topMin + gap / 2 + Math.random() * Math.max(0, topMax - topMin);
+    if (lastOpening != null) {
+      const lo = Math.max(topMin + gap / 2, lastOpening - reach);
+      const hi = Math.min(topMax + gap / 2, lastOpening + reach);
+      center = lo + Math.random() * Math.max(0, hi - lo);
+    }
+    lastOpening = center;
+    const top = center - gap / 2;
     const spots = Array.from({ length: 10 }, () => ({
       dx: 6 + Math.random() * (PIPE_W - 12),
       dy: Math.random(),
@@ -327,7 +350,8 @@
 
   function flap() {
     const k = worldScale();
-    shark.vy = FLAP_V * k;
+    const lift = FLAP_V * k;
+    shark.vy = Math.max(lift * 1.3, Math.min(shark.vy, 0) * 0.15 + lift);
     audio.flap();
     const tx = shark.x - Math.cos(shark.rot) * 18 * k;
     const ty = shark.y - Math.sin(shark.rot) * 18 * k;
@@ -611,7 +635,7 @@
 
   function drawPipe(p) {
     const k = (p.gap || PIPE_GAP) / PIPE_GAP;
-    const lipH = PIPE_W * 0.28 * k, lipOver = PIPE_W * 0.06;
+    const lipH = PIPE_W * 0.22 * k, lipOver = PIPE_W * 0.05;
     const bottomY = p.top + (p.gap || PIPE_GAP);
     drawRock(p.x, -2, PIPE_W, p.top - lipH + 2, p, false);
     drawRock(p.x, bottomY + lipH, PIPE_W, GROUND_Y - bottomY - lipH, p, true);
@@ -1115,7 +1139,7 @@
   let last = performance.now();
   let acc = 0;
   function loop(now) {
-    acc += Math.min(now - last, 250);
+    acc += Math.min(now - last, 34);
     last = now;
     while (acc >= STEP) {
       if (!paused) update();
