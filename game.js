@@ -280,16 +280,20 @@
   }));
 
   function difficulty() {
-    return Math.min(1, score / 18);
+    return Math.min(1, Math.floor(score / 10) / 3);
   }
 
   function scrollSpeed() {
-    return SPEED * (1 + difficulty() * 0.2);
+    return SPEED * (1 + difficulty() * 0.24);
+  }
+
+  function pipeSpacing() {
+    return PIPE_SPACING * (1 - difficulty() * 0.08);
   }
 
   function gapSize() {
     const k = worldScale();
-    return (PIPE_GAP - difficulty() * 26) * k;
+    return (PIPE_GAP - difficulty() * 28) * k;
   }
 
   function reset() {
@@ -310,13 +314,13 @@
   function spawnPipe(x) {
     const k = worldScale();
     const gap = gapSize();
-    const margin = 32 * k;
-    const topMin = margin;
-    const topMax = Math.max(topMin, GROUND_Y - gap - margin);
+    const topMin = H * 0.07;
+    const bottomLimit = GROUND_Y - H * 0.2;
+    const topMax = Math.max(topMin, bottomLimit - gap);
     const v = Math.abs(FLAP_V) * k;
     const g = GRAVITY * k;
     const climb = (v * v) / (2 * g);
-    const frames = PIPE_SPACING / scrollSpeed();
+    const frames = pipeSpacing() / scrollSpeed();
     const taps = Math.max(2, frames / 16);
     const reach = climb * taps * (0.4 + difficulty() * 0.16);
     let center = topMin + gap / 2 + Math.random() * Math.max(0, topMax - topMin);
@@ -502,7 +506,7 @@
       }
       if (pipes.length && pipes[0].x < -PIPE_W - 10) pipes.shift();
       const last = pipes[pipes.length - 1];
-      if (last && last.x <= W + 10 - PIPE_SPACING) spawnPipe(last.x + PIPE_SPACING);
+      if (last && last.x <= W + 10 - pipeSpacing()) spawnPipe(last.x + pipeSpacing());
     }
 
     if ((state === "play" || state === "dying") && shark.y + shark.r * worldScale() >= GROUND_Y) {
