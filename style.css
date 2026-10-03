@@ -19,9 +19,9 @@ body {
 
 #wrap {
   position: relative;
-  height: min(100vh, calc(100vw * 512 / 288));
-  height: min(100dvh, calc(100vw * 512 / 288));
-  aspect-ratio: 288 / 512;
+  height: min(100vh, calc(100vw * 512 / 416));
+  height: min(100dvh, calc(100vw * 512 / 416));
+  aspect-ratio: 416 / 512;
 }
 
 #game {
@@ -48,7 +48,7 @@ body {
 }
 
 /* Ponsel tegak: kanvas mengisi layar. */
-@media (max-aspect-ratio: 288/512) {
+@media (max-aspect-ratio: 416/512) {
   body {
     overflow: hidden;
     touch-action: none;

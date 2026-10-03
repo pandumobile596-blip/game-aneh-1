@@ -1,23 +1,23 @@
 (() => {
   "use strict";
 
-  // Same stage as Flappy Bird: 288×512, ground line at 79% of the height.
-  const BASE_W = 288;
+  // Stage matches the flappybird.io column: about 416×512, thin ground.
+  const BASE_W = 416;
   const BASE_H = 512;
-  const GROUND_RATIO = 0.79;
+  const GROUND_RATIO = 0.9;
   let W = BASE_W;
   let H = BASE_H;
   let GROUND_Y = Math.round(H * GROUND_RATIO);
   let sceneryReady = false;
 
-  // 60fps form of Flappy Bird's 30fps numbers: gravity 1, flap -9, fall cap 10, scroll 4.
+  // 60fps form of Flappy Bird. Gap, width, and spacing match the on-screen ratios.
   const GRAVITY = 0.25;
   const FLAP_V = -4.5;
   const MAX_FALL = 5;
-  const SPEED = 2;
-  const PIPE_W = 52;
-  const PIPE_GAP = 100;
-  const PIPE_SPACING = BASE_W / 2;
+  const SPEED = BASE_W / 144;
+  const PIPE_W = 42;
+  const PIPE_GAP = 122;
+  const PIPE_SPACING = Math.round(BASE_W * 0.52);
 
   function worldScale() {
     return H / BASE_H;
@@ -299,8 +299,9 @@
   function spawnPipe(x) {
     const k = worldScale();
     const gap = PIPE_GAP * k;
-    // Flappy Bird's opening: top of the gap lands between 80 and 221 on a 512-tall screen.
-    const top = (80 + Math.random() * 141) * k;
+    const topMin = 36 * k;
+    const topMax = GROUND_Y - gap - 40 * k;
+    const top = topMin + Math.random() * Math.max(0, topMax - topMin);
     const spots = Array.from({ length: 10 }, () => ({
       dx: 6 + Math.random() * (PIPE_W - 12),
       dy: Math.random(),
@@ -391,8 +392,8 @@
     const k = worldScale();
     const c = Math.cos(shark.rot), s = Math.sin(shark.rot);
     return [
-      { x: shark.x + c * 6 * k, y: shark.y + s * 6 * k, r: 9 * k },
-      { x: shark.x - c * 6 * k, y: shark.y - s * 6 * k, r: 8 * k },
+      { x: shark.x + c * 8 * k, y: shark.y + s * 8 * k, r: 10 * k },
+      { x: shark.x - c * 8 * k, y: shark.y - s * 8 * k, r: 9 * k },
     ];
   }
 
