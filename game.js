@@ -1,23 +1,25 @@
 (() => {
   "use strict";
 
-  // Stage matches the flappybird.io column: about 416×512, thin ground.
+  // Stage matches the flappybird.io column. Ground is a thin strip, like the grass.
   const BASE_W = 416;
   const BASE_H = 512;
-  const GROUND_RATIO = 0.9;
+  const GROUND_RATIO = 0.93;
   let W = BASE_W;
   let H = BASE_H;
   let GROUND_Y = Math.round(H * GROUND_RATIO);
   let sceneryReady = false;
 
-  // 60fps form of Flappy Bird. Gap, width, and spacing match the on-screen ratios.
-  const GRAVITY = 0.25;
-  const FLAP_V = -4.5;
-  const MAX_FALL = 5;
+  // Same ratios as Flappy Bird, on laptop and on a tall phone.
+  // One flap still climbs about 40% of the opening, in the same time.
+  const PIPE_W = Math.round(BASE_W * 0.18);
+  const PIPE_GAP = Math.round(BASE_H * 0.27);
+  const PIPE_SPACING = Math.round(BASE_W * 0.5);
+  const GAP_K = PIPE_GAP / 100;
+  const GRAVITY = 0.25 * GAP_K;
+  const FLAP_V = -4.5 * GAP_K;
+  const MAX_FALL = 5 * GAP_K;
   const SPEED = BASE_W / 144;
-  const PIPE_W = 42;
-  const PIPE_GAP = 122;
-  const PIPE_SPACING = Math.round(BASE_W * 0.52);
 
   function worldScale() {
     return H / BASE_H;
@@ -274,7 +276,7 @@
   }));
   const weeds = Array.from({ length: Math.ceil(W / 36) }, (_, i) => ({
     x: i * 36 + Math.random() * 14,
-    h: 18 + Math.random() * 22,
+    h: 8 + Math.random() * 14,
     p: Math.random() * 6,
   }));
 
@@ -609,7 +611,7 @@
 
   function drawPipe(p) {
     const k = (p.gap || PIPE_GAP) / PIPE_GAP;
-    const lipH = 16 * k, lipOver = 3 * k;
+    const lipH = PIPE_W * 0.28 * k, lipOver = PIPE_W * 0.06;
     const bottomY = p.top + (p.gap || PIPE_GAP);
     drawRock(p.x, -2, PIPE_W, p.top - lipH + 2, p, false);
     drawRock(p.x, bottomY + lipH, PIPE_W, GROUND_Y - bottomY - lipH, p, true);
@@ -1090,7 +1092,7 @@
     drawShark();
 
     if (state === "play" || state === "dying") {
-      text(String(score), W / 2, H > BASE_H + 8 ? Math.max(64, H * 0.07) : 60, 44);
+      text(String(score), W / 2, H * 0.11, Math.round(52 * worldScale()), "#fff", "center", "#000");
     }
     if (state === "ready") drawReady();
     if (state === "over") drawOver();
