@@ -258,7 +258,7 @@
     { name: "Hiu Galaksi", body: "#6a3ec8", dark: "#3d2380", belly: "#e1d5f5", gear: "planet" },
   ];
 
-  const shark = { x: Math.round(BASE_W * 0.22), y: 0, vy: 0, rot: 0, r: 12 };
+  const shark = { x: Math.round(BASE_W * 0.22), y: 0, vy: 0, rot: 0, r: 12, boost: 0 };
   const okBtn = { x: W / 2 - 52, y: 330, w: 104, h: 36 };
 
   let bubbles = [];
@@ -307,6 +307,7 @@
     shark.y = readyLayout().shark;
     shark.vy = 0;
     shark.rot = 0;
+    shark.boost = 0;
     overTimer = 0;
     deep = Math.random() < 0.4;
     skin = Math.floor(Math.random() * SKINS.length);
@@ -323,7 +324,7 @@
     const climb = (v * v) / (2 * g);
     const frames = pipeSpacing() / scrollSpeed();
     const taps = Math.max(2, frames / 16);
-    const reach = climb * taps * (0.4 + difficulty() * 0.16);
+    const reach = climb * taps * (0.28 + difficulty() * 0.12);
     let center = topMin + gap / 2 + Math.random() * Math.max(0, topMax - topMin);
     if (lastOpening != null) {
       const lo = Math.max(topMin + gap / 2, lastOpening - reach);
@@ -355,8 +356,7 @@
 
   function flap() {
     const k = worldScale();
-    shark.vy = FLAP_V * k;
-    shark.rot = -0.6;
+    shark.boost = 7;
     audio.flap();
     const tx = shark.x - Math.cos(shark.rot) * 18 * k;
     const ty = shark.y - Math.sin(shark.rot) * 18 * k;
@@ -487,10 +487,16 @@
 
     if (state === "play" || state === "dying") {
       const k = worldScale();
-      shark.vy = Math.min(shark.vy + GRAVITY * k, MAX_FALL * k);
+      const lift = FLAP_V * k;
+      if (shark.boost > 0) {
+        shark.vy += (lift - shark.vy) * 0.42;
+        shark.boost--;
+      } else {
+        shark.vy = Math.min(shark.vy + GRAVITY * k, MAX_FALL * k);
+      }
       shark.y += shark.vy;
-      if (shark.vy < 0.6 * k) shark.rot += (-0.6 - shark.rot) * 0.45;
-      else shark.rot = Math.min(Math.PI / 2, shark.rot + 0.1);
+      const nose = shark.vy < 0.4 * k ? -0.5 : Math.min(1.15, shark.vy / (MAX_FALL * k) * 1.15);
+      shark.rot += (nose - shark.rot) * 0.14;
       if (shark.y < -20 * k) { shark.y = -20 * k; shark.vy = 0; }
     }
 
