@@ -10,7 +10,7 @@
   let GROUND_Y = Math.round(H * GROUND_RATIO);
   let sceneryReady = false;
 
-  // Flappy-style hop. Gap starts roomy and tightens a little with the score.
+  // Flappy-style hop. The opening tightens with the score, but stays clearable.
   const PIPE_W = Math.round(BASE_W * 0.15);
   const PIPE_GAP = Math.round(BASE_H * 0.30);
   const PIPE_SPACING = Math.round(BASE_W * 0.55);
@@ -281,20 +281,20 @@
   }));
 
   function difficulty() {
-    return Math.min(1, Math.floor(score / 10) / 3);
+    return Math.min(1, Math.floor(score / 10) / 4);
   }
 
   function scrollSpeed() {
-    return SPEED * (1 + difficulty() * 0.24);
+    return SPEED * (1 + difficulty() * 0.36);
   }
 
   function pipeSpacing() {
-    return PIPE_SPACING * (1 - difficulty() * 0.08);
+    return PIPE_SPACING * (1 - difficulty() * 0.14);
   }
 
   function gapSize() {
     const k = worldScale();
-    return (PIPE_GAP - difficulty() * 28) * k;
+    return (PIPE_GAP - 12 - difficulty() * 36) * k;
   }
 
   function reset() {
@@ -323,7 +323,7 @@
     const climb = (v * v) / (2 * g);
     const frames = pipeSpacing() / scrollSpeed();
     const taps = Math.max(2, frames / 16);
-    const reach = climb * taps * (0.4 + difficulty() * 0.16);
+    const reach = climb * taps * (0.48 + difficulty() * 0.2);
     let center = topMin + gap / 2 + Math.random() * Math.max(0, topMax - topMin);
     if (lastOpening != null) {
       const lo = Math.max(topMin + gap / 2, lastOpening - reach);
