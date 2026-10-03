@@ -1,21 +1,23 @@
 (() => {
   "use strict";
 
-  const BASE_W = 416;
+  // Same stage as Flappy Bird: 288×512, ground line at 79% of the height.
+  const BASE_W = 288;
   const BASE_H = 512;
-  const GROUND_H = 112;
+  const GROUND_RATIO = 0.79;
   let W = BASE_W;
   let H = BASE_H;
-  let GROUND_Y = H - GROUND_H;
+  let GROUND_Y = Math.round(H * GROUND_RATIO);
   let sceneryReady = false;
 
+  // 60fps form of Flappy Bird's 30fps numbers: gravity 1, flap -9, fall cap 10, scroll 4.
   const GRAVITY = 0.25;
-  const FLAP_V = -4.6;
-  const MAX_FALL = 9;
+  const FLAP_V = -4.5;
+  const MAX_FALL = 5;
   const SPEED = 2;
   const PIPE_W = 52;
   const PIPE_GAP = 100;
-  const PIPE_SPACING = 220;
+  const PIPE_SPACING = BASE_W / 2;
 
   function worldScale() {
     return H / BASE_H;
@@ -60,14 +62,6 @@
     return scale;
   }
 
-  function fillWideScenery() {
-    let edge = weeds.reduce((m, w) => Math.max(m, w.x), 0);
-    while (edge < W + 36) {
-      edge += 36;
-      weeds.push({ x: edge, h: 18 + Math.random() * 22, p: Math.random() * 6 });
-    }
-  }
-
   function clampScenery() {
     plankton.forEach((p) => {
       if (p.y < 0 || p.y > GROUND_Y) p.y = Math.random() * GROUND_Y;
@@ -103,20 +97,13 @@
     fitFrame();
     const rect = canvas.getBoundingClientRect();
     if (rect.width < 2 || rect.height < 2) return;
-    const ratio = rect.height / rect.width;
-    let nextW = BASE_W;
-    let nextH = BASE_H;
-    if (ratio >= BASE_H / BASE_W) nextH = Math.round(BASE_W * ratio);
-    else nextW = Math.round(BASE_H / ratio);
-    const scale = pickScale(nextW, nextH);
-    W = nextW;
+    const nextH = Math.max(BASE_H, Math.round(BASE_W * (rect.height / rect.width)));
+    const scale = pickScale(BASE_W, nextH);
+    W = BASE_W;
     H = nextH;
-    GROUND_Y = H - GROUND_H;
+    GROUND_Y = Math.round(H * GROUND_RATIO);
     syncOkBtn();
-    if (sceneryReady) {
-      clampScenery();
-      fillWideScenery();
-    }
+    if (sceneryReady) clampScenery();
     const bw = Math.round(W * scale);
     const bh = Math.round(H * scale);
     if (canvas.width !== bw || canvas.height !== bh) {
@@ -250,7 +237,6 @@
   let isNewBest = false;
   let groundX = 0;
   let pipes = [];
-  let lastOpening = null;
   let flash = 0;
   let shake = 0;
   let overTimer = 0;
@@ -270,7 +256,7 @@
     { name: "Hiu Galaksi", body: "#6a3ec8", dark: "#3d2380", belly: "#e1d5f5", gear: "planet" },
   ];
 
-  const shark = { x: 110, y: 0, vy: 0, rot: 0, r: 11 };
+  const shark = { x: Math.round(BASE_W * 0.2), y: 0, vy: 0, rot: 0, r: 12 };
   const okBtn = { x: W / 2 - 52, y: 330, w: 104, h: 36 };
 
   let bubbles = [];
@@ -292,12 +278,8 @@
     p: Math.random() * 6,
   }));
 
-  function difficulty() {
-    return Math.min(1, score / 22);
-  }
-
   function scrollSpeed() {
-    return SPEED + difficulty() * 0.55;
+    return SPEED;
   }
 
   function reset() {
@@ -305,7 +287,6 @@
     score = 0;
     isNewBest = false;
     pipes = [];
-    lastOpening = null;
     bubbles = [];
     shark.y = readyLayout().shark;
     shark.vy = 0;
@@ -317,20 +298,9 @@
 
   function spawnPipe(x) {
     const k = worldScale();
-    const t = difficulty();
-    const gap = (PIPE_GAP - t * 22) * k;
-    const margin = (72 - t * 18) * k;
-    const minCenter = margin + gap / 2;
-    const maxCenter = GROUND_Y - margin - gap / 2;
-    let center = minCenter + Math.random() * Math.max(0, maxCenter - minCenter);
-    if (lastOpening != null && maxCenter > minCenter) {
-      const reach = (90 + t * 40) * k;
-      const lo = Math.max(minCenter, lastOpening - reach);
-      const hi = Math.min(maxCenter, lastOpening + reach);
-      center = lo + Math.random() * Math.max(0, hi - lo);
-    }
-    lastOpening = center;
-    const top = center - gap / 2;
+    const gap = PIPE_GAP * k;
+    // Flappy Bird's opening: top of the gap lands between 80 and 221 on a 512-tall screen.
+    const top = (80 + Math.random() * 141) * k;
     const spots = Array.from({ length: 10 }, () => ({
       dx: 6 + Math.random() * (PIPE_W - 12),
       dy: Math.random(),
@@ -381,7 +351,8 @@
     switch (state) {
       case "ready":
         state = "play";
-        spawnPipe(W + 40);
+        spawnPipe(W + 200);
+        spawnPipe(W + 200 + PIPE_SPACING);
         flap();
         break;
       case "play":
@@ -492,7 +463,6 @@
     }
 
     if (state === "play") {
-      const spacing = PIPE_SPACING - difficulty() * 46;
       for (const p of pipes) {
         p.x -= flow;
         if (!p.passed && p.x + PIPE_W < shark.x) {
@@ -504,7 +474,7 @@
       }
       if (pipes.length && pipes[0].x < -PIPE_W - 10) pipes.shift();
       const last = pipes[pipes.length - 1];
-      if (last && last.x < W + 40 - spacing) spawnPipe(last.x + spacing);
+      if (last && last.x <= W + 10 - PIPE_SPACING) spawnPipe(last.x + PIPE_SPACING);
     }
 
     if ((state === "play" || state === "dying") && shark.y + shark.r * worldScale() >= GROUND_Y) {
@@ -664,7 +634,7 @@
     g.addColorStop(0, "#f2d48a");
     g.addColorStop(1, "#c9a55c");
     ctx.fillStyle = g;
-    ctx.fillRect(0, GROUND_Y, W, GROUND_H);
+    ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y);
 
     // sand ripples
     ctx.strokeStyle = "rgba(150,110,50,0.35)";

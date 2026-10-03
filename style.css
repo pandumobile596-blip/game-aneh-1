@@ -2,7 +2,7 @@
 
 html, body {
   height: 100%;
-  background: #071a2b;
+  background: #000;
   font-family: "Segoe UI", Arial, sans-serif;
   color: #ddd;
   overflow: hidden;
@@ -19,9 +19,9 @@ body {
 
 #wrap {
   position: relative;
-  width: 100vw;
-  height: 100vh;
-  height: 100dvh;
+  height: min(100vh, calc(100vw * 512 / 288));
+  height: min(100dvh, calc(100vw * 512 / 288));
+  aspect-ratio: 288 / 512;
 }
 
 #game {
@@ -47,8 +47,8 @@ body {
   cursor: pointer;
 }
 
-/* Ponsel tegak: kanvas mengisi layar, seperti Flappy Bird. */
-@media (max-aspect-ratio: 416/512), (max-width: 520px) {
+/* Ponsel tegak: kanvas mengisi layar. */
+@media (max-aspect-ratio: 288/512) {
   body {
     overflow: hidden;
     touch-action: none;
