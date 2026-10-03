@@ -27,7 +27,6 @@
   const muteBtn = document.getElementById("muteBtn");
 
   const wrap = document.getElementById("wrap");
-  const hint = document.querySelector(".hint");
 
   function isPhoneLayout() {
     const vv = window.visualViewport;
@@ -44,7 +43,6 @@
       wrap.style.left = "";
       wrap.style.width = "";
       wrap.style.height = "";
-      if (hint) hint.style.display = "";
       return;
     }
     const vv = window.visualViewport;
@@ -54,13 +52,20 @@
     wrap.style.left = (vv ? vv.offsetLeft : 0) + "px";
     wrap.style.width = vw + "px";
     wrap.style.height = vh + "px";
-    if (hint) hint.style.display = "none";
   }
 
-  function pickScale(h) {
+  function pickScale(w, h) {
     let scale = Math.max(1, Math.ceil(window.devicePixelRatio || 1) * 2);
-    while (scale > 1 && BASE_W * scale * h * scale > 2500000) scale -= 1;
+    while (scale > 1 && w * scale * h * scale > 2500000) scale -= 1;
     return scale;
+  }
+
+  function fillWideScenery() {
+    let edge = weeds.reduce((m, w) => Math.max(m, w.x), 0);
+    while (edge < W + 36) {
+      edge += 36;
+      weeds.push({ x: edge, h: 18 + Math.random() * 22, p: Math.random() * 6 });
+    }
   }
 
   function clampScenery() {
@@ -98,12 +103,20 @@
     fitFrame();
     const rect = canvas.getBoundingClientRect();
     if (rect.width < 2 || rect.height < 2) return;
-    const nextH = Math.max(BASE_H, Math.round(BASE_W * (rect.height / rect.width)));
-    const scale = pickScale(nextH);
+    const ratio = rect.height / rect.width;
+    let nextW = BASE_W;
+    let nextH = BASE_H;
+    if (ratio >= BASE_H / BASE_W) nextH = Math.round(BASE_W * ratio);
+    else nextW = Math.round(BASE_H / ratio);
+    const scale = pickScale(nextW, nextH);
+    W = nextW;
     H = nextH;
     GROUND_Y = H - GROUND_H;
     syncOkBtn();
-    if (sceneryReady) clampScenery();
+    if (sceneryReady) {
+      clampScenery();
+      fillWideScenery();
+    }
     const bw = Math.round(W * scale);
     const bh = Math.round(H * scale);
     if (canvas.width !== bw || canvas.height !== bh) {
@@ -1050,27 +1063,29 @@
     const titleY = tall ? GROUND_Y * 0.22 : 120;
     const py = (tall ? GROUND_Y * 0.36 : 170) + (1 - ease) * (tall ? 80 : 300);
     text("Game Over", W / 2, titleY - (1 - ease) * 30, 36, "#ff8a3d");
-    const panelX = 40;
-    const panelW = W - 80;
+    const panelW = Math.min(W - 80, 360);
+    const panelX = (W - panelW) / 2;
     roundRect(panelX, py, panelW, 116, 8, "#e9f7fb", "#0b2a3d");
     roundRect(panelX + 6, py + 6, panelW - 12, 104, 6, null, "#8fc9dc");
 
-    text("MEDAL", 92, py + 22, 12, "#1a8fb8", "center", "#fff");
-    text("SCORE", W - 64, py + 22, 12, "#1a8fb8", "center", "#fff");
-    text("BEST", W - 64, py + 66, 12, "#1a8fb8", "center", "#fff");
+    const medalX = panelX + 52;
+    const scoreX = panelX + panelW - 24;
+    text("MEDAL", medalX, py + 22, 12, "#1a8fb8", "center", "#fff");
+    text("SCORE", scoreX, py + 22, 12, "#1a8fb8", "center", "#fff");
+    text("BEST", scoreX, py + 66, 12, "#1a8fb8", "center", "#fff");
 
     const shown = overTimer > 25 ? Math.min(score, Math.floor((overTimer - 25) / 2)) : 0;
-    text(String(shown), W - 64, py + 44, 22);
-    text(String(best), W - 64, py + 88, 22);
+    text(String(shown), scoreX, py + 44, 22);
+    text(String(best), scoreX, py + 88, 22);
 
     if (isNewBest && overTimer > 25) {
-      roundRect(W - 128, py + 58, 30, 14, 3, "#ff3b3b");
+      roundRect(scoreX - 64, py + 58, 30, 14, 3, "#ff3b3b");
       ctx.font = "bold 9px Arial"; ctx.fillStyle = "#fff"; ctx.textAlign = "center";
-      ctx.fillText("NEW", W - 113, py + 65);
+      ctx.fillText("NEW", scoreX - 49, py + 65);
     }
 
     const m = medalFor(score);
-    const mx = 92, my = py + 66;
+    const mx = medalX, my = py + 66;
     ctx.beginPath(); ctx.arc(mx, my, 24, 0, Math.PI * 2);
     ctx.fillStyle = m ? m.c1 : "#cfe6ee"; ctx.fill();
     if (m) {
@@ -1114,8 +1129,7 @@
     if (paused) {
       ctx.fillStyle = "rgba(0,0,0,0.45)";
       ctx.fillRect(0, 0, W, H);
-      text("PAUSED", W / 2, H / 2 - 10, 32);
-      text("Tap untuk lanjut", W / 2, H / 2 + 26, 14);
+      text("PAUSED", W / 2, H / 2, 32);
     }
 
     if (flash > 0) {
