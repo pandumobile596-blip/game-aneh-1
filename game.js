@@ -16,8 +16,8 @@
   const PIPE_SPACING = Math.round(BASE_W * 0.55);
   // Same hop as Flappy Bird: fixed upward speed, then a clean fall.
   const GRAVITY = 0.25;
-  const FLAP_V = -5.7;
-  const MAX_FALL = 5.5;
+  const FLAP_V = -4.6;
+  const MAX_FALL = 9;
   const SPEED = BASE_W / 155;
 
   function worldScale() {
@@ -258,7 +258,7 @@
     { name: "Hiu Galaksi", body: "#6a3ec8", dark: "#3d2380", belly: "#e1d5f5", gear: "planet" },
   ];
 
-  const shark = { x: Math.round(BASE_W * 0.22), y: 0, vy: 0, rot: 0, r: 12, boost: 0 };
+  const shark = { x: Math.round(BASE_W * 0.22), y: 0, vy: 0, rot: 0, r: 12 };
   const okBtn = { x: W / 2 - 52, y: 330, w: 104, h: 36 };
 
   let bubbles = [];
@@ -307,7 +307,6 @@
     shark.y = readyLayout().shark;
     shark.vy = 0;
     shark.rot = 0;
-    shark.boost = 0;
     overTimer = 0;
     deep = Math.random() < 0.4;
     skin = Math.floor(Math.random() * SKINS.length);
@@ -489,8 +488,8 @@
       const k = worldScale();
       shark.vy = Math.min(shark.vy + GRAVITY * k, MAX_FALL * k);
       shark.y += shark.vy;
-      const nose = shark.vy < 0 ? -0.45 : Math.min(1.05, shark.vy / (MAX_FALL * k) * 1.05);
-      shark.rot += (nose - shark.rot) * 0.22;
+      if (shark.vy < 0) shark.rot = Math.max(-0.45, shark.rot - 0.15);
+      else if (shark.vy > 3 * k) shark.rot = Math.min(Math.PI / 2, shark.rot + 0.08);
       if (shark.y < -20 * k) { shark.y = -20 * k; shark.vy = 0; }
     }
 
