@@ -34,6 +34,13 @@ body {
   cursor: pointer;
 }
 
+/* Social bar stays where Adsterra puts it, and stays invisible until game over. */
+html:not(.show-ad) > iframe {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
 #muteBtn {
   position: absolute;
   top: 8px;

@@ -41,19 +41,7 @@
   // Phone only: drop the playfield below a visible top banner.
   // The ad node itself stays where Adsterra placed it. An empty gap is not reserved.
   function phoneAdInset() {
-    const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-    let bottom = 0;
-    for (const el of document.querySelectorAll("iframe")) {
-      if (wrap.contains(el)) continue;
-      const cs = getComputedStyle(el);
-      if (cs.display === "none" || cs.visibility === "hidden" || Number(cs.opacity) === 0) continue;
-      const r = el.getBoundingClientRect();
-      if (r.width < 80 || r.height < 40 || r.height > vh * 0.4) continue;
-      if (r.top > vh * 0.45 || r.bottom < 24) continue;
-      bottom = Math.max(bottom, r.bottom);
-    }
-    if (bottom < 24) return 0;
-    return Math.min(Math.ceil(bottom) + 6, Math.round(vh * 0.4));
+    return 0;
   }
 
   function fitFrame() {
@@ -156,9 +144,10 @@
       if (state === "over" || stripping) return;
       stripping = true;
       const had = document.querySelector("iframe, script[src*='bauval.org']");
-      removeAdNodes();
+      // #region agent log
+      fetch('http://127.0.0.1:7829/ingest/08baef46-6911-4973-a01e-aaef37e3fff2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c6015e'},body:JSON.stringify({sessionId:'c6015e',hypothesisId:'D',location:'game.js:keepAdsOff',message:'strip while not game over',data:{state,had:!!had,iframes:document.querySelectorAll('iframe').length},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       stripping = false;
-      if (had) resize();
     };
     new MutationObserver(keepAdsOff).observe(document.documentElement, { childList: true });
     new MutationObserver(keepAdsOff).observe(document.body, { childList: true });
@@ -574,29 +563,48 @@
 
   function showGameOverAd() {
     adSweep += 1;
-    if (document.querySelector("script[src*='bauval.org']")) return;
+    document.documentElement.classList.add("show-ad");
+    const existing = !!document.querySelector("script[src*='bauval.org']");
+    // #region agent log
+    fetch('http://127.0.0.1:7829/ingest/08baef46-6911-4973-a01e-aaef37e3fff2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c6015e'},body:JSON.stringify({sessionId:'c6015e',hypothesisId:existing?'B':'A',location:'game.js:showGameOverAd',message:'show game over ad',data:{state,existing,iframes:document.querySelectorAll('iframe').length},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    setTimeout(() => {
+      const frame = document.querySelector("iframe");
+      const box = frame ? frame.getBoundingClientRect() : null;
+      const cs = frame ? getComputedStyle(frame) : null;
+      // #region agent log
+      fetch('http://127.0.0.1:7829/ingest/08baef46-6911-4973-a01e-aaef37e3fff2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c6015e'},body:JSON.stringify({sessionId:'c6015e',runId:'post-fix',hypothesisId:'F',location:'game.js:showGameOverAd:visible',message:'ad visibility on game over',data:{state,show:document.documentElement.classList.contains('show-ad'),iframes:document.querySelectorAll('iframe').length,display:cs?cs.display:'',w:box?Math.round(box.width):0,h:box?Math.round(box.height):0},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+    }, 2500);
+    if (existing) return;
     const script = document.createElement("script");
     script.dataset.cfasync = "false";
     script.src = AD_SRC;
+    script.onload = () => {
+      // #region agent log
+      fetch('http://127.0.0.1:7829/ingest/08baef46-6911-4973-a01e-aaef37e3fff2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c6015e'},body:JSON.stringify({sessionId:'c6015e',hypothesisId:'C',location:'game.js:ad.onload',message:'ad script loaded',data:{state,iframes:document.querySelectorAll('iframe').length},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+    };
+    script.onerror = () => {
+      // #region agent log
+      fetch('http://127.0.0.1:7829/ingest/08baef46-6911-4973-a01e-aaef37e3fff2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c6015e'},body:JSON.stringify({sessionId:'c6015e',hypothesisId:'E',location:'game.js:ad.onerror',message:'ad script failed',data:{state},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+    };
     document.body.appendChild(script);
+    setTimeout(() => {
+      const frame = document.querySelector("iframe");
+      const box = frame ? frame.getBoundingClientRect() : null;
+      // #region agent log
+      fetch('http://127.0.0.1:7829/ingest/08baef46-6911-4973-a01e-aaef37e3fff2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c6015e'},body:JSON.stringify({sessionId:'c6015e',hypothesisId:'C',location:'game.js:ad.after2s',message:'ad nodes after wait',data:{state,scripts:document.querySelectorAll("script[src*='bauval.org']").length,iframes:document.querySelectorAll('iframe').length,w:box?Math.round(box.width):0,h:box?Math.round(box.height):0,parent:frame&&frame.parentElement?frame.parentElement.tagName:''},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+    }, 2500);
   }
 
   function clearGameOverAd() {
-    const token = ++adSweep;
-    const sweep = () => {
-      if (token !== adSweep) return;
-      removeAdNodes();
-      resize();
-    };
-    sweep();
-    let n = 0;
-    const timer = setInterval(() => {
-      if (token !== adSweep || ++n > 10) {
-        clearInterval(timer);
-        return;
-      }
-      sweep();
-    }, 200);
+    document.documentElement.classList.remove("show-ad");
+    // #region agent log
+    fetch('http://127.0.0.1:7829/ingest/08baef46-6911-4973-a01e-aaef37e3fff2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c6015e'},body:JSON.stringify({sessionId:'c6015e',hypothesisId:'D',location:'game.js:clearGameOverAd',message:'clear ad',data:{state,iframes:document.querySelectorAll('iframe').length},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
   }
 
   function gameOver() {
