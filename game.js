@@ -408,21 +408,28 @@
           reset();
           beginPlay();
           if (popped) {
-            popGrace = performance.now() + 2000;
-            setTimeout(() => window.focus(), 400);
+            popGrace = performance.now() + 2500;
+            setTimeout(() => window.focus(), 600);
           }
         }
         break;
     }
   }
 
+  function pointInCanvas(e) {
+    const p = e.touches ? e.touches[0] : e;
+    if (!p || p.clientX == null) return false;
+    const r = canvas.getBoundingClientRect();
+    return p.clientX >= r.left && p.clientX <= r.right && p.clientY >= r.top && p.clientY <= r.bottom;
+  }
+
   function popGesture(e) {
-    if (e.target !== canvas || !adClickAllowed()) return false;
+    if (!adClickAllowed() || !pointInCanvas(e)) return false;
     return inRect(toLogical(e), okBtn);
   }
 
   function onGamePointer(e) {
-    if (e.target !== canvas) return;
+    if (!pointInCanvas(e)) return;
     if (e.type === "mousedown" && ignoreMouse) return;
     if (e.type === "touchstart") {
       ignoreMouse = true;

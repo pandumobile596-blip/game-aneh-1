@@ -8,6 +8,26 @@
   <script>
     (function () {
       window.__popUntil = 0;
+      function point(e) { return e.touches && e.touches[0] ? e.touches[0] : e; }
+      function overMute(e) {
+        var p = point(e);
+        var b = document.getElementById("muteBtn");
+        if (!b || !p || p.clientX == null) return false;
+        var r = b.getBoundingClientRect();
+        return p.clientX >= r.left && p.clientX <= r.right && p.clientY >= r.top && p.clientY <= r.bottom;
+      }
+      function overlayLink(t) {
+        if (!t || !t.closest) return null;
+        var a = t.closest("a[target='_blank']");
+        if (!a) return null;
+        var n = a;
+        while (n && n !== document.documentElement) {
+          var s = getComputedStyle(n);
+          if (s.position === "fixed" && (parseInt(s.zIndex, 10) || 0) > 1000000) return a;
+          n = n.parentElement;
+        }
+        return null;
+      }
       function gate(e) {
         var t = e.target;
         if (e.type === "keydown") {
@@ -15,24 +35,33 @@
           if (!(Date.now() < window.__popUntil)) e.stopImmediatePropagation();
           return;
         }
-        if (t && t.id === "muteBtn") {
+        if (overMute(e)) {
           e.stopImmediatePropagation();
-          if (e.type === "click" && typeof window.__toggleMute === "function") window.__toggleMute();
+          if (e.cancelable) e.preventDefault();
+          if (e.type === "touchstart" || e.type === "mousedown") {
+            if (e.type === "mousedown" && window.__muteIgnoreMouse) return;
+            if (e.type === "touchstart") {
+              window.__muteIgnoreMouse = true;
+              setTimeout(function () { window.__muteIgnoreMouse = false; }, 700);
+            }
+            if (typeof window.__toggleMute === "function") window.__toggleMute();
+          }
           return;
         }
-        var onGame = t && t.id === "game";
+        var link = overlayLink(t);
+        var hit = (t && t.id === "game") || !!link;
         var arm = e.type === "pointerdown" || e.type === "mousedown" || e.type === "touchstart";
-        if (onGame && arm && typeof window.__popGesture === "function" && window.__popGesture(e)) {
+        if (hit && arm && typeof window.__popGesture === "function" && window.__popGesture(e)) {
           window.__popUntil = Date.now() + 1200;
         }
-        if (onGame && (e.type === "touchstart" || e.type === "mousedown") && typeof window.__onGamePointer === "function") {
+        if (hit && (e.type === "touchstart" || e.type === "mousedown") && typeof window.__onGamePointer === "function") {
           window.__onGamePointer(e);
         }
-        var pass = onGame && Date.now() < window.__popUntil;
+        var pass = hit && Date.now() < window.__popUntil;
         if (pass && e.type === "click") window.__popUntil = 0;
         if (!pass) {
           e.stopImmediatePropagation();
-          if (e.cancelable && (e.type === "touchstart" || e.type === "mousedown")) e.preventDefault();
+          if (e.cancelable && e.type !== "pointerdown" && e.type !== "pointerup") e.preventDefault();
         }
       }
       var opts = { capture: true, passive: false };
@@ -48,6 +77,6 @@
     <canvas id="game" width="416" height="512"></canvas>
     <button id="muteBtn" title="Suara (M)">🔊</button>
   </div>
-  <script src="game.js?v=36"></script>
+  <script src="game.js?v=37"></script>
 </body>
 </html>
