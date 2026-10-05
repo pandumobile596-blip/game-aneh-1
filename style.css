@@ -34,6 +34,21 @@ body {
   cursor: pointer;
 }
 
+/* Social bar sits outside the playfield: beside the column, or above it on a phone. */
+#adDock {
+  position: fixed;
+  z-index: 40;
+  pointer-events: none;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+#adDock > * {
+  pointer-events: auto;
+  max-width: 100%;
+}
+
 #muteBtn {
   position: absolute;
   top: 8px;
