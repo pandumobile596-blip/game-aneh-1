@@ -329,7 +329,7 @@
     return (PIPE_GAP - 12 - difficulty() * 36) * k;
   }
 
-  function reset() {
+  function reset(hideAd) {
     state = "ready";
     score = 0;
     isNewBest = false;
@@ -342,7 +342,7 @@
     overTimer = 0;
     deep = Math.random() < 0.4;
     skin = Math.floor(Math.random() * SKINS.length);
-    clearGameOverAd();
+    if (hideAd !== false) clearGameOverAd();
   }
 
   function spawnPipe(x) {
@@ -1246,6 +1246,6 @@
 
   sceneryReady = true;
   resize();
-  reset();
+  reset(false);
   requestAnimationFrame(loop);
 })();
