@@ -404,28 +404,15 @@
     }
   }
 
-  function overCanvas(e) {
-    const p = e.touches ? e.touches[0] : e;
-    if (!p) return false;
-    const r = canvas.getBoundingClientRect();
-    const m = muteBtn.getBoundingClientRect();
-    const inMute = p.clientX >= m.left && p.clientX <= m.right && p.clientY >= m.top && p.clientY <= m.bottom;
-    return !inMute && p.clientX >= r.left && p.clientX <= r.right && p.clientY >= r.top && p.clientY <= r.bottom;
-  }
-  let lastTouch = 0;
-  // The ad network may lay a full-screen link over the page; taps must still reach the game
-  // without cancelling that link's own click.
-  window.addEventListener("mousedown", (e) => {
-    if (e.button !== 0 || performance.now() - lastTouch < 700 || !overCanvas(e)) return;
-    if (e.target === canvas) e.preventDefault();
+  canvas.addEventListener("mousedown", (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
     action(toLogical(e));
-  }, true);
-  window.addEventListener("touchstart", (e) => {
-    if (!overCanvas(e)) return;
-    lastTouch = performance.now();
-    if (e.target === canvas) e.preventDefault();
+  });
+  canvas.addEventListener("touchstart", (e) => {
+    e.preventDefault();
     action(toLogical(e));
-  }, { capture: true, passive: false });
+  }, { passive: false });
   muteBtn.addEventListener("click", (e) => { e.stopPropagation(); toggleMute(); muteBtn.blur(); });
 
   window.addEventListener("keydown", (e) => {
