@@ -233,7 +233,6 @@
   let state = "ready"; // ready | play | dying | over
   let deaths = 0;
   let popGrace = 0;
-  let passAdClick = false;
   let ignoreMouse = false;
   let paused = false;
   let frame = 0;
@@ -409,40 +408,30 @@
           reset();
           beginPlay();
           if (popped) {
-            popGrace = performance.now() + 1500;
-            window.focus();
+            popGrace = performance.now() + 2000;
+            setTimeout(() => window.focus(), 400);
           }
         }
         break;
     }
   }
 
+  function popGesture(e) {
+    if (e.target !== canvas || !adClickAllowed()) return false;
+    return inRect(toLogical(e), okBtn);
+  }
+
   function onGamePointer(e) {
     if (e.target !== canvas) return;
     if (e.type === "mousedown" && ignoreMouse) return;
-    const openAd = adClickAllowed();
-    if (openAd) passAdClick = true;
-    else if (e.cancelable) e.preventDefault();
     if (e.type === "touchstart") {
       ignoreMouse = true;
       setTimeout(() => { ignoreMouse = false; }, 700);
     }
     action(toLogical(e));
-    if (!openAd) e.stopImmediatePropagation();
   }
-  document.addEventListener("mousedown", onGamePointer, true);
-  document.addEventListener("touchstart", onGamePointer, { capture: true, passive: false });
-  document.addEventListener("click", (e) => {
-    if (e.target !== canvas) return;
-    if (passAdClick) {
-      passAdClick = false;
-      return;
-    }
-    e.stopImmediatePropagation();
-  }, true);
-  muteBtn.addEventListener("click", (e) => { e.stopPropagation(); toggleMute(); muteBtn.blur(); });
 
-  window.addEventListener("keydown", (e) => {
+  function onGameKey(e) {
     if (e.code === "Space" || e.code === "ArrowUp" || e.code === "KeyW" || e.code === "Enter") {
       e.preventDefault();
       if (e.repeat) return;
@@ -452,7 +441,12 @@
     } else if (e.code === "KeyM") {
       toggleMute();
     }
-  });
+  }
+
+  window.__popGesture = popGesture;
+  window.__onGamePointer = onGamePointer;
+  window.__onGameKey = onGameKey;
+  window.__toggleMute = () => { toggleMute(); muteBtn.blur(); };
 
   document.addEventListener("visibilitychange", () => {
     if (document.hidden && state === "play" && performance.now() > popGrace) paused = true;
