@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="style.css?v=14" />
   <script>
     (function () {
-      window.__popUntil = 0;
+      var adHref = "";
       function point(e) { return e.touches && e.touches[0] ? e.touches[0] : e; }
       function overMute(e) {
         var p = point(e);
@@ -16,23 +16,38 @@
         var r = b.getBoundingClientRect();
         return p.clientX >= r.left && p.clientX <= r.right && p.clientY >= r.top && p.clientY <= r.bottom;
       }
-      function overlayLink(t) {
-        if (!t || !t.closest) return null;
-        var a = t.closest("a[target='_blank']");
-        if (!a) return null;
-        var n = a;
-        while (n && n !== document.documentElement) {
-          var s = getComputedStyle(n);
-          if (s.position === "fixed" && (parseInt(s.zIndex, 10) || 0) > 1000000) return a;
-          n = n.parentElement;
+      function findAdLink() {
+        var list = document.getElementsByTagName("a");
+        for (var i = 0; i < list.length; i++) {
+          var a = list[i];
+          if (a.target !== "_blank" || !a.href) continue;
+          var n = a;
+          while (n && n !== document.documentElement) {
+            var s = getComputedStyle(n);
+            if (s.position === "fixed" && (parseInt(s.zIndex, 10) || 0) > 1000000) return a;
+            n = n.parentElement;
+          }
         }
         return null;
       }
+      function rememberAd() {
+        var a = findAdLink();
+        if (a && /^https?:/i.test(a.href)) adHref = a.href;
+      }
+      function isAdNode(t) {
+        var n = t && t.nodeType === 1 ? t : t && t.parentElement;
+        while (n && n !== document.documentElement) {
+          var s = getComputedStyle(n);
+          if (s.position === "fixed" && (parseInt(s.zIndex, 10) || 0) > 1000000) return true;
+          n = n.parentElement;
+        }
+        return false;
+      }
+      new MutationObserver(rememberAd).observe(document.documentElement, { childList: true, subtree: true, attributes: true });
       function gate(e) {
-        var t = e.target;
         if (e.type === "keydown") {
           if (typeof window.__onGameKey === "function") window.__onGameKey(e);
-          if (!(Date.now() < window.__popUntil)) e.stopImmediatePropagation();
+          e.stopImmediatePropagation();
           return;
         }
         if (overMute(e)) {
@@ -48,20 +63,32 @@
           }
           return;
         }
-        var link = overlayLink(t);
-        var hit = (t && t.id === "game") || !!link;
-        var arm = e.type === "pointerdown" || e.type === "mousedown" || e.type === "touchstart";
-        if (hit && arm && typeof window.__popGesture === "function" && window.__popGesture(e)) {
-          window.__popUntil = Date.now() + 1200;
+        if ((e.type === "touchstart" || e.type === "mousedown") && typeof window.__popGesture === "function" && window.__popGesture(e)) {
+          window.__wantPop = true;
+          rememberAd();
         }
-        if (hit && (e.type === "touchstart" || e.type === "mousedown") && typeof window.__onGamePointer === "function") {
+        if ((e.type === "touchstart" || e.type === "mousedown") && typeof window.__onGamePointer === "function") {
           window.__onGamePointer(e);
         }
-        var pass = hit && Date.now() < window.__popUntil;
-        if (pass && e.type === "click") window.__popUntil = 0;
-        if (!pass) {
+        var nativeFallback = false;
+        if ((e.type === "touchend" || e.type === "click") && window.__wantPop) {
+          rememberAd();
+          if (adHref) {
+            var opened = null;
+            try { opened = window.open(adHref, "_blank"); } catch (err) { opened = null; }
+            var ok = false;
+            try { ok = !!opened && !opened.closed; } catch (err2) { ok = !!opened; }
+            if (ok || e.type === "click") window.__wantPop = false;
+            nativeFallback = !ok && e.type === "click" && isAdNode(e.target);
+          } else if (e.type === "click") {
+            window.__wantPop = false;
+          }
+        }
+        if (isAdNode(e.target) || (e.target && e.target.id === "game")) {
           e.stopImmediatePropagation();
-          if (e.cancelable && e.type !== "pointerdown" && e.type !== "pointerup") e.preventDefault();
+          if (!nativeFallback && e.cancelable && (e.type === "click" || e.type === "auxclick" || e.type === "contextmenu")) {
+            e.preventDefault();
+          }
         }
       }
       var opts = { capture: true, passive: false };
@@ -77,6 +104,6 @@
     <canvas id="game" width="416" height="512"></canvas>
     <button id="muteBtn" title="Suara (M)">🔊</button>
   </div>
-  <script src="game.js?v=37"></script>
+  <script src="game.js?v=38"></script>
 </body>
 </html>

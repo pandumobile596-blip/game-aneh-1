@@ -232,8 +232,8 @@
   // ---------- State ----------
   let state = "ready"; // ready | play | dying | over
   let deaths = 0;
-  let popGrace = 0;
   let ignoreMouse = false;
+  let pausedByHide = false;
   let paused = false;
   let frame = 0;
   let score = 0;
@@ -403,14 +403,9 @@
       case "over":
         if (overTimer < 40) return;
         if (!pos || inRect(pos, okBtn)) {
-          const popped = adClickAllowed();
           audio.swoosh();
           reset();
           beginPlay();
-          if (popped) {
-            popGrace = performance.now() + 2500;
-            setTimeout(() => window.focus(), 600);
-          }
         }
         break;
     }
@@ -456,7 +451,15 @@
   window.__toggleMute = () => { toggleMute(); muteBtn.blur(); };
 
   document.addEventListener("visibilitychange", () => {
-    if (document.hidden && state === "play" && performance.now() > popGrace) paused = true;
+    if (document.hidden) {
+      if (state === "play" && !paused) {
+        paused = true;
+        pausedByHide = true;
+      }
+    } else if (pausedByHide) {
+      paused = false;
+      pausedByHide = false;
+    }
   });
 
   // ---------- Update ----------
