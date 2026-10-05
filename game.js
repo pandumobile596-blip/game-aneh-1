@@ -231,9 +231,6 @@
 
   // ---------- State ----------
   let state = "ready"; // ready | play | dying | over
-  let deaths = 0;
-  let ignoreMouse = false;
-  let pausedByHide = false;
   let paused = false;
   let frame = 0;
   let score = 0;
@@ -379,10 +376,6 @@
     return p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
   }
 
-  function adClickAllowed() {
-    return state === "over" && overTimer >= 40 && deaths > 0 && deaths % 3 === 0;
-  }
-
   function beginPlay() {
     state = "play";
     spawnPipe(W + 200);
@@ -411,29 +404,18 @@
     }
   }
 
-  function pointInCanvas(e) {
-    const p = e.touches ? e.touches[0] : e;
-    if (!p || p.clientX == null) return false;
-    const r = canvas.getBoundingClientRect();
-    return p.clientX >= r.left && p.clientX <= r.right && p.clientY >= r.top && p.clientY <= r.bottom;
-  }
-
-  function popGesture(e) {
-    if (!adClickAllowed() || !pointInCanvas(e)) return false;
-    return inRect(toLogical(e), okBtn);
-  }
-
-  function onGamePointer(e) {
-    if (!pointInCanvas(e)) return;
-    if (e.type === "mousedown" && ignoreMouse) return;
-    if (e.type === "touchstart") {
-      ignoreMouse = true;
-      setTimeout(() => { ignoreMouse = false; }, 700);
-    }
+  canvas.addEventListener("mousedown", (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
     action(toLogical(e));
-  }
+  });
+  canvas.addEventListener("touchstart", (e) => {
+    e.preventDefault();
+    action(toLogical(e));
+  }, { passive: false });
+  muteBtn.addEventListener("click", (e) => { e.stopPropagation(); toggleMute(); muteBtn.blur(); });
 
-  function onGameKey(e) {
+  window.addEventListener("keydown", (e) => {
     if (e.code === "Space" || e.code === "ArrowUp" || e.code === "KeyW" || e.code === "Enter") {
       e.preventDefault();
       if (e.repeat) return;
@@ -443,23 +425,10 @@
     } else if (e.code === "KeyM") {
       toggleMute();
     }
-  }
-
-  window.__popGesture = popGesture;
-  window.__onGamePointer = onGamePointer;
-  window.__onGameKey = onGameKey;
-  window.__toggleMute = () => { toggleMute(); muteBtn.blur(); };
+  });
 
   document.addEventListener("visibilitychange", () => {
-    if (document.hidden) {
-      if (state === "play" && !paused) {
-        paused = true;
-        pausedByHide = true;
-      }
-    } else if (pausedByHide) {
-      paused = false;
-      pausedByHide = false;
-    }
+    if (document.hidden && state === "play") paused = true;
   });
 
   // ---------- Update ----------
@@ -566,7 +535,6 @@
   function gameOver() {
     state = "over";
     overTimer = 0;
-    deaths += 1;
     if (score > best) {
       best = score;
       isNewBest = true;

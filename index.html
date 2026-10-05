@@ -5,105 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <title>StupidShark — Main Online</title>
   <link rel="stylesheet" href="style.css?v=14" />
-  <script>
-    (function () {
-      var adHref = "";
-      function point(e) { return e.touches && e.touches[0] ? e.touches[0] : e; }
-      function overMute(e) {
-        var p = point(e);
-        var b = document.getElementById("muteBtn");
-        if (!b || !p || p.clientX == null) return false;
-        var r = b.getBoundingClientRect();
-        return p.clientX >= r.left && p.clientX <= r.right && p.clientY >= r.top && p.clientY <= r.bottom;
-      }
-      function findAdLink() {
-        var list = document.getElementsByTagName("a");
-        for (var i = 0; i < list.length; i++) {
-          var a = list[i];
-          if (a.target !== "_blank" || !a.href) continue;
-          var n = a;
-          while (n && n !== document.documentElement) {
-            var s = getComputedStyle(n);
-            if (s.position === "fixed" && (parseInt(s.zIndex, 10) || 0) > 1000000) return a;
-            n = n.parentElement;
-          }
-        }
-        return null;
-      }
-      function rememberAd() {
-        var a = findAdLink();
-        if (a && /^https?:/i.test(a.href)) adHref = a.href;
-      }
-      function isAdNode(t) {
-        var n = t && t.nodeType === 1 ? t : t && t.parentElement;
-        while (n && n !== document.documentElement) {
-          var s = getComputedStyle(n);
-          if (s.position === "fixed" && (parseInt(s.zIndex, 10) || 0) > 1000000) return true;
-          n = n.parentElement;
-        }
-        return false;
-      }
-      new MutationObserver(rememberAd).observe(document.documentElement, { childList: true, subtree: true, attributes: true });
-      function gate(e) {
-        if (e.type === "keydown") {
-          if (typeof window.__onGameKey === "function") window.__onGameKey(e);
-          e.stopImmediatePropagation();
-          return;
-        }
-        if (overMute(e)) {
-          e.stopImmediatePropagation();
-          if (e.cancelable) e.preventDefault();
-          if (e.type === "touchstart" || e.type === "mousedown") {
-            if (e.type === "mousedown" && window.__muteIgnoreMouse) return;
-            if (e.type === "touchstart") {
-              window.__muteIgnoreMouse = true;
-              setTimeout(function () { window.__muteIgnoreMouse = false; }, 700);
-            }
-            if (typeof window.__toggleMute === "function") window.__toggleMute();
-          }
-          return;
-        }
-        if ((e.type === "touchstart" || e.type === "mousedown") && typeof window.__popGesture === "function" && window.__popGesture(e)) {
-          window.__wantPop = true;
-          rememberAd();
-        }
-        if ((e.type === "touchstart" || e.type === "mousedown") && typeof window.__onGamePointer === "function") {
-          window.__onGamePointer(e);
-        }
-        var nativeFallback = false;
-        if ((e.type === "touchend" || e.type === "click") && window.__wantPop) {
-          rememberAd();
-          if (adHref) {
-            var opened = null;
-            try { opened = window.open(adHref, "_blank"); } catch (err) { opened = null; }
-            var ok = false;
-            try { ok = !!opened && !opened.closed; } catch (err2) { ok = !!opened; }
-            if (ok || e.type === "click") window.__wantPop = false;
-            nativeFallback = !ok && e.type === "click" && isAdNode(e.target);
-          } else if (e.type === "click") {
-            window.__wantPop = false;
-          }
-        }
-        if (isAdNode(e.target) || (e.target && e.target.id === "game")) {
-          e.stopImmediatePropagation();
-          if (!nativeFallback && e.cancelable && (e.type === "click" || e.type === "auxclick" || e.type === "contextmenu")) {
-            e.preventDefault();
-          }
-        }
-      }
-      var opts = { capture: true, passive: false };
-      ["pointerdown", "pointerup", "mousedown", "mouseup", "touchstart", "touchend", "click", "auxclick", "contextmenu", "keydown"].forEach(function (type) {
-        window.addEventListener(type, gate, opts);
-      });
-    })();
-  </script>
-  <script data-cfasync="false" src="https://abscloud.org/1/98a8b310d27f4644beb8b07a194cc4fc"></script>
 </head>
 <body>
   <div id="wrap">
     <canvas id="game" width="416" height="512"></canvas>
     <button id="muteBtn" title="Suara (M)">🔊</button>
   </div>
-  <script src="game.js?v=38"></script>
+  <script src="game.js?v=39"></script>
 </body>
 </html>
