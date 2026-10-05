@@ -38,12 +38,6 @@
     return vw / vh < BASE_W / BASE_H - 0.01;
   }
 
-  // Phone only: drop the playfield below a visible top banner.
-  // The ad node itself stays where Adsterra placed it. An empty gap is not reserved.
-  function phoneAdInset() {
-    return 0;
-  }
-
   function fitFrame() {
     const phone = isPhoneLayout();
     document.body.classList.toggle("phone", phone);
@@ -57,11 +51,10 @@
     const vv = window.visualViewport;
     const vw = vv ? vv.width : window.innerWidth;
     const vh = vv ? vv.height : window.innerHeight;
-    const inset = phoneAdInset();
-    wrap.style.top = ((vv ? vv.offsetTop : 0) + inset) + "px";
+    wrap.style.top = (vv ? vv.offsetTop : 0) + "px";
     wrap.style.left = (vv ? vv.offsetLeft : 0) + "px";
     wrap.style.width = vw + "px";
-    wrap.style.height = Math.max(160, vh - inset) + "px";
+    wrap.style.height = vh + "px";
   }
 
   function pickScale(w, h) {
@@ -126,31 +119,6 @@
   if (window.visualViewport) {
     visualViewport.addEventListener("resize", resize);
     visualViewport.addEventListener("scroll", resize);
-  }
-  {
-    let adInset = 0;
-    const watchAds = () => {
-      if (!isPhoneLayout()) return;
-      const next = phoneAdInset();
-      if (Math.abs(next - adInset) > 4) {
-        adInset = next;
-        resize();
-      }
-    };
-    new MutationObserver(watchAds).observe(document.documentElement, { childList: true });
-    setInterval(watchAds, 700);
-    let stripping = false;
-    const keepAdsOff = () => {
-      if (state === "over" || stripping) return;
-      stripping = true;
-      const had = document.querySelector("iframe, script[src*='bauval.org']");
-      // #region agent log
-      fetch('http://127.0.0.1:7829/ingest/08baef46-6911-4973-a01e-aaef37e3fff2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c6015e'},body:JSON.stringify({sessionId:'c6015e',hypothesisId:'D',location:'game.js:keepAdsOff',message:'strip while not game over',data:{state,had:!!had,iframes:document.querySelectorAll('iframe').length},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-      stripping = false;
-    };
-    new MutationObserver(keepAdsOff).observe(document.documentElement, { childList: true });
-    new MutationObserver(keepAdsOff).observe(document.body, { childList: true });
   }
 
   // Underwater bubbles, CC0. Swim is one glub; a pipe is two rising bubbles.
@@ -329,7 +297,7 @@
     return (PIPE_GAP - 12 - difficulty() * 36) * k;
   }
 
-  function reset(hideAd) {
+  function reset() {
     state = "ready";
     score = 0;
     isNewBest = false;
@@ -342,7 +310,6 @@
     overTimer = 0;
     deep = Math.random() < 0.4;
     skin = Math.floor(Math.random() * SKINS.length);
-    if (hideAd !== false) clearGameOverAd();
   }
 
   function spawnPipe(x) {
@@ -414,7 +381,6 @@
     if (paused) { paused = false; return; }
     switch (state) {
       case "ready":
-        clearGameOverAd();
         state = "play";
         spawnPipe(W + 200);
         spawnPipe(W + 200 + PIPE_SPACING);
@@ -551,62 +517,6 @@
     if (state === "over") overTimer++;
   }
 
-  const AD_SRC = "https://bauval.org/14/d771dcdc75dbcd970294a70088b919b1";
-  let adSweep = 0;
-
-  function removeAdNodes() {
-    document.querySelectorAll("script[src*='bauval.org'], link[href*='bauval.org']").forEach((el) => el.remove());
-    document.querySelectorAll("iframe").forEach((el) => el.remove());
-    document.querySelectorAll("[id*='d771dcdc75dbcd970294a70088b919b1'], [class*='d771dcdc75dbcd970294a70088b919b1']").forEach((el) => el.remove());
-    if (/^\(\d+\)/.test(document.title)) document.title = "StupidShark — Main Online";
-  }
-
-  function showGameOverAd() {
-    adSweep += 1;
-    document.documentElement.classList.remove("playing");
-    const existing = !!document.querySelector("script[src*='bauval.org']");
-    // #region agent log
-    fetch('http://127.0.0.1:7829/ingest/08baef46-6911-4973-a01e-aaef37e3fff2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c6015e'},body:JSON.stringify({sessionId:'c6015e',hypothesisId:existing?'B':'A',location:'game.js:showGameOverAd',message:'show game over ad',data:{state,existing,iframes:document.querySelectorAll('iframe').length},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-    setTimeout(() => {
-      const frame = document.querySelector("iframe");
-      const box = frame ? frame.getBoundingClientRect() : null;
-      const cs = frame ? getComputedStyle(frame) : null;
-      // #region agent log
-      fetch('http://127.0.0.1:7829/ingest/08baef46-6911-4973-a01e-aaef37e3fff2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c6015e'},body:JSON.stringify({sessionId:'c6015e',runId:'post-fix',hypothesisId:'F',location:'game.js:showGameOverAd:visible',message:'ad visibility on game over',data:{state,show:document.documentElement.classList.contains('show-ad'),iframes:document.querySelectorAll('iframe').length,display:cs?cs.display:'',w:box?Math.round(box.width):0,h:box?Math.round(box.height):0},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-    }, 2500);
-    if (existing) return;
-    const script = document.createElement("script");
-    script.dataset.cfasync = "false";
-    script.src = AD_SRC;
-    script.onload = () => {
-      // #region agent log
-      fetch('http://127.0.0.1:7829/ingest/08baef46-6911-4973-a01e-aaef37e3fff2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c6015e'},body:JSON.stringify({sessionId:'c6015e',hypothesisId:'C',location:'game.js:ad.onload',message:'ad script loaded',data:{state,iframes:document.querySelectorAll('iframe').length},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-    };
-    script.onerror = () => {
-      // #region agent log
-      fetch('http://127.0.0.1:7829/ingest/08baef46-6911-4973-a01e-aaef37e3fff2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c6015e'},body:JSON.stringify({sessionId:'c6015e',hypothesisId:'E',location:'game.js:ad.onerror',message:'ad script failed',data:{state},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-    };
-    document.body.appendChild(script);
-    setTimeout(() => {
-      const frame = document.querySelector("iframe");
-      const box = frame ? frame.getBoundingClientRect() : null;
-      // #region agent log
-      fetch('http://127.0.0.1:7829/ingest/08baef46-6911-4973-a01e-aaef37e3fff2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c6015e'},body:JSON.stringify({sessionId:'c6015e',hypothesisId:'C',location:'game.js:ad.after2s',message:'ad nodes after wait',data:{state,scripts:document.querySelectorAll("script[src*='bauval.org']").length,iframes:document.querySelectorAll('iframe').length,w:box?Math.round(box.width):0,h:box?Math.round(box.height):0,parent:frame&&frame.parentElement?frame.parentElement.tagName:''},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-    }, 2500);
-  }
-
-  function clearGameOverAd() {
-    document.documentElement.classList.add("playing");
-    // #region agent log
-    fetch('http://127.0.0.1:7829/ingest/08baef46-6911-4973-a01e-aaef37e3fff2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c6015e'},body:JSON.stringify({sessionId:'c6015e',hypothesisId:'D',location:'game.js:clearGameOverAd',message:'clear ad',data:{state,iframes:document.querySelectorAll('iframe').length},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-  }
-
   function gameOver() {
     state = "over";
     overTimer = 0;
@@ -615,7 +525,6 @@
       isNewBest = true;
       localStorage.setItem("fs_best", String(best));
     }
-    showGameOverAd();
   }
 
   // ---------- Drawing ----------
@@ -1246,6 +1155,6 @@
 
   sceneryReady = true;
   resize();
-  reset(false);
+  reset();
   requestAnimationFrame(loop);
 })();

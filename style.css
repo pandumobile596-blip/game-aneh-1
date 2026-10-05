@@ -34,12 +34,6 @@ body {
   cursor: pointer;
 }
 
-/* Hide the card only while a round is being played. It must stay visible while Adsterra creates it. */
-html.playing > iframe {
-  opacity: 0 !important;
-  pointer-events: none !important;
-}
-
 #muteBtn {
   position: absolute;
   top: 8px;
