@@ -233,7 +233,8 @@
   let state = "ready"; // ready | play | dying | over
   let deaths = 0;
   let popGrace = 0;
-  const POPUNDER_SRC = "https://abscloud.org/1/98a8b310d27f4644beb8b07a194cc4fc";
+  let passAdClick = false;
+  let ignoreMouse = false;
   let paused = false;
   let frame = 0;
   let score = 0;
@@ -379,12 +380,8 @@
     return p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
   }
 
-  function armPopunder() {
-    document.querySelectorAll('script[src*="abscloud.org"]').forEach((el) => el.remove());
-    const script = document.createElement("script");
-    script.dataset.cfasync = "false";
-    script.src = POPUNDER_SRC;
-    document.body.appendChild(script);
+  function adClickAllowed() {
+    return state === "over" && overTimer >= 40 && deaths > 0 && deaths % 3 === 0;
   }
 
   function beginPlay() {
@@ -407,24 +404,42 @@
       case "over":
         if (overTimer < 40) return;
         if (!pos || inRect(pos, okBtn)) {
-          const popped = deaths > 0 && deaths % 3 === 0;
+          const popped = adClickAllowed();
           audio.swoosh();
           reset();
           beginPlay();
           if (popped) {
             popGrace = performance.now() + 1500;
             window.focus();
-            requestAnimationFrame(() => {
-              document.querySelectorAll('script[src*="abscloud.org"]').forEach((el) => el.remove());
-            });
           }
         }
         break;
     }
   }
 
-  canvas.addEventListener("mousedown", (e) => { e.preventDefault(); action(toLogical(e)); });
-  canvas.addEventListener("touchstart", (e) => { e.preventDefault(); action(toLogical(e)); }, { passive: false });
+  function onGamePointer(e) {
+    if (e.target !== canvas) return;
+    if (e.type === "mousedown" && ignoreMouse) return;
+    const openAd = adClickAllowed();
+    if (openAd) passAdClick = true;
+    else if (e.cancelable) e.preventDefault();
+    if (e.type === "touchstart") {
+      ignoreMouse = true;
+      setTimeout(() => { ignoreMouse = false; }, 700);
+    }
+    action(toLogical(e));
+    if (!openAd) e.stopImmediatePropagation();
+  }
+  document.addEventListener("mousedown", onGamePointer, true);
+  document.addEventListener("touchstart", onGamePointer, { capture: true, passive: false });
+  document.addEventListener("click", (e) => {
+    if (e.target !== canvas) return;
+    if (passAdClick) {
+      passAdClick = false;
+      return;
+    }
+    e.stopImmediatePropagation();
+  }, true);
   muteBtn.addEventListener("click", (e) => { e.stopPropagation(); toggleMute(); muteBtn.blur(); });
 
   window.addEventListener("keydown", (e) => {
@@ -553,7 +568,6 @@
       isNewBest = true;
       localStorage.setItem("fs_best", String(best));
     }
-    if (deaths % 3 === 0) armPopunder();
   }
 
   // ---------- Drawing ----------
