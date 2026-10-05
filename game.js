@@ -48,6 +48,7 @@
     if (r.width > 20) el.style.setProperty("width", Math.ceil(r.width) + "px", "important");
     if (r.height > 20 && cs.height === "auto") el.style.setProperty("height", Math.ceil(r.height) + "px", "important");
     el.style.setProperty("position", "relative", "important");
+    el.style.setProperty("inset", "auto", "important");
     el.style.setProperty("top", "auto", "important");
     el.style.setProperty("right", "auto", "important");
     el.style.setProperty("bottom", "auto", "important");
@@ -69,6 +70,17 @@
         const r = el.getBoundingClientRect();
         if (r.height > window.innerHeight * 0.55 && r.width > window.innerWidth * 0.85) continue;
         adDock.appendChild(el);
+      }
+      for (const root of [document.body, document.documentElement]) {
+        for (const el of [...root.children]) {
+          if (el === document.head || el === document.body || el === wrap || el === adDock) continue;
+          if (el.tagName === "SCRIPT" || el.tagName === "NOSCRIPT" || el.tagName === "LINK" || el.tagName === "STYLE" || el.tagName === "META" || el.tagName === "TITLE") continue;
+          const fixed = getComputedStyle(el).position === "fixed" || el.tagName === "IFRAME";
+          if (!fixed) continue;
+          const r = el.getBoundingClientRect();
+          if (r.height > window.innerHeight * 0.55 && r.width > window.innerWidth * 0.85) continue;
+          adDock.appendChild(el);
+        }
       }
       for (const el of adDock.querySelectorAll("*")) releaseFixed(el);
       for (const el of adDock.children) releaseFixed(el);
@@ -216,6 +228,7 @@
       }
     };
     new MutationObserver(watchAds).observe(document.body, { childList: true });
+    new MutationObserver(watchAds).observe(document.documentElement, { childList: true });
     setInterval(watchAds, 1000);
   }
 

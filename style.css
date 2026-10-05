@@ -49,6 +49,18 @@ body {
   max-width: 100%;
 }
 
+#adDock iframe {
+  position: relative !important;
+  inset: auto !important;
+  top: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+  margin: 0 auto !important;
+  max-width: 100% !important;
+  z-index: 1 !important;
+}
+
 #muteBtn {
   position: absolute;
   top: 8px;
