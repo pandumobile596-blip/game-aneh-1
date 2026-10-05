@@ -38,115 +38,38 @@
     return vw / vh < BASE_W / BASE_H - 0.01;
   }
 
-  const adDock = document.getElementById("adDock");
-  let claiming = false;
-
-  function releaseFixed(el) {
-    const cs = getComputedStyle(el);
-    if (cs.position !== "fixed") return;
-    const r = el.getBoundingClientRect();
-    if (r.width > 20) el.style.setProperty("width", Math.ceil(r.width) + "px", "important");
-    if (r.height > 20 && cs.height === "auto") el.style.setProperty("height", Math.ceil(r.height) + "px", "important");
-    el.style.setProperty("position", "relative", "important");
-    el.style.setProperty("inset", "auto", "important");
-    el.style.setProperty("top", "auto", "important");
-    el.style.setProperty("right", "auto", "important");
-    el.style.setProperty("bottom", "auto", "important");
-    el.style.setProperty("left", "auto", "important");
-    el.style.setProperty("transform", "none", "important");
-    el.style.setProperty("max-width", "100%", "important");
-  }
-
-  function claimAds() {
-    if (!adDock || claiming) return;
-    claiming = true;
-    try {
-      for (const el of [...document.body.children]) {
-        if (el === wrap || el === adDock || el.tagName === "SCRIPT" || el.tagName === "NOSCRIPT") continue;
-        const fixed = getComputedStyle(el).position === "fixed"
-          || el.tagName === "IFRAME"
-          || [...el.querySelectorAll("*")].some((n) => getComputedStyle(n).position === "fixed");
-        if (!fixed) continue;
-        const r = el.getBoundingClientRect();
-        if (r.height > window.innerHeight * 0.55 && r.width > window.innerWidth * 0.85) continue;
-        adDock.appendChild(el);
-      }
-      for (const root of [document.body, document.documentElement]) {
-        for (const el of [...root.children]) {
-          if (el === document.head || el === document.body || el === wrap || el === adDock) continue;
-          if (el.tagName === "SCRIPT" || el.tagName === "NOSCRIPT" || el.tagName === "LINK" || el.tagName === "STYLE" || el.tagName === "META" || el.tagName === "TITLE") continue;
-          const fixed = getComputedStyle(el).position === "fixed" || el.tagName === "IFRAME";
-          if (!fixed) continue;
-          const r = el.getBoundingClientRect();
-          if (r.height > window.innerHeight * 0.55 && r.width > window.innerWidth * 0.85) continue;
-          adDock.appendChild(el);
-        }
-      }
-      for (const el of adDock.querySelectorAll("*")) releaseFixed(el);
-      for (const el of adDock.children) releaseFixed(el);
-    } finally {
-      claiming = false;
-    }
-  }
-
-  function placeAdDock(phone) {
-    if (!adDock) return 0;
-    const has = adDock.childElementCount > 0;
-    adDock.style.padding = "0";
-    adDock.style.maxHeight = has ? "" : "0px";
-    if (!has) return 0;
-    if (!phone) {
-      const rect = wrap.getBoundingClientRect();
-      const gap = window.innerWidth - rect.right;
-      if (gap >= 200) {
-        adDock.style.top = "50%";
-        adDock.style.bottom = "auto";
-        adDock.style.left = "auto";
-        adDock.style.right = "12px";
-        adDock.style.width = Math.min(340, gap - 24) + "px";
-        adDock.style.transform = "translateY(-50%)";
-        return 0;
-      }
-      const below = window.innerHeight - rect.bottom;
-      if (below >= 90) {
-        adDock.style.top = (rect.bottom + 8) + "px";
-        adDock.style.left = "50%";
-        adDock.style.right = "auto";
-        adDock.style.bottom = "auto";
-        adDock.style.width = Math.min(360, rect.width) + "px";
-        adDock.style.transform = "translateX(-50%)";
-        return 0;
-      }
-    }
-    adDock.style.top = "0";
-    adDock.style.left = "0";
-    adDock.style.right = "0";
-    adDock.style.bottom = "auto";
-    adDock.style.width = "100%";
-    adDock.style.transform = "none";
-    adDock.style.maxHeight = "28dvh";
-    adDock.style.padding = "max(6px, env(safe-area-inset-top, 0px)) 8px 0";
-    const h = adDock.getBoundingClientRect().height;
+  // Phone only: drop the playfield below a visible top banner.
+  // The ad node itself stays where Adsterra placed it. An empty gap is not reserved.
+  function phoneAdInset() {
     const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-    return h > 24 ? Math.min(Math.ceil(h) + 8, Math.round(vh * 0.32)) : 0;
+    let bottom = 0;
+    for (const el of document.querySelectorAll("iframe")) {
+      if (wrap.contains(el)) continue;
+      const cs = getComputedStyle(el);
+      if (cs.display === "none" || cs.visibility === "hidden" || Number(cs.opacity) === 0) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width < 80 || r.height < 40 || r.height > vh * 0.4) continue;
+      if (r.top > vh * 0.45 || r.bottom < 24) continue;
+      bottom = Math.max(bottom, r.bottom);
+    }
+    if (bottom < 24) return 0;
+    return Math.min(Math.ceil(bottom) + 6, Math.round(vh * 0.4));
   }
 
   function fitFrame() {
     const phone = isPhoneLayout();
     document.body.classList.toggle("phone", phone);
-    claimAds();
     if (!phone) {
       wrap.style.top = "";
       wrap.style.left = "";
       wrap.style.width = "";
       wrap.style.height = "";
-      placeAdDock(false);
       return;
     }
     const vv = window.visualViewport;
     const vw = vv ? vv.width : window.innerWidth;
     const vh = vv ? vv.height : window.innerHeight;
-    const inset = placeAdDock(true);
+    const inset = phoneAdInset();
     wrap.style.top = ((vv ? vv.offsetTop : 0) + inset) + "px";
     wrap.style.left = (vv ? vv.offsetLeft : 0) + "px";
     wrap.style.width = vw + "px";
@@ -216,20 +139,18 @@
     visualViewport.addEventListener("resize", resize);
     visualViewport.addEventListener("scroll", resize);
   }
-  if (adDock) {
-    let adH = 0;
+  {
+    let adInset = 0;
     const watchAds = () => {
-      const before = adDock.childElementCount;
-      claimAds();
-      const h = adDock.getBoundingClientRect().height;
-      if (adDock.childElementCount !== before || Math.abs(h - adH) > 4) {
-        adH = h;
+      if (!isPhoneLayout()) return;
+      const next = phoneAdInset();
+      if (Math.abs(next - adInset) > 4) {
+        adInset = next;
         resize();
       }
     };
-    new MutationObserver(watchAds).observe(document.body, { childList: true });
     new MutationObserver(watchAds).observe(document.documentElement, { childList: true });
-    setInterval(watchAds, 1000);
+    setInterval(watchAds, 700);
   }
 
   // Underwater bubbles, CC0. Swim is one glub; a pipe is two rising bubbles.
