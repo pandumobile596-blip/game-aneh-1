@@ -151,6 +151,17 @@
     };
     new MutationObserver(watchAds).observe(document.documentElement, { childList: true });
     setInterval(watchAds, 700);
+    let stripping = false;
+    const keepAdsOff = () => {
+      if (state === "over" || stripping) return;
+      stripping = true;
+      const had = document.querySelector("iframe, script[src*='bauval.org']");
+      removeAdNodes();
+      stripping = false;
+      if (had) resize();
+    };
+    new MutationObserver(keepAdsOff).observe(document.documentElement, { childList: true });
+    new MutationObserver(keepAdsOff).observe(document.body, { childList: true });
   }
 
   // Underwater bubbles, CC0. Swim is one glub; a pipe is two rising bubbles.
@@ -342,6 +353,7 @@
     overTimer = 0;
     deep = Math.random() < 0.4;
     skin = Math.floor(Math.random() * SKINS.length);
+    clearGameOverAd();
   }
 
   function spawnPipe(x) {
@@ -413,6 +425,7 @@
     if (paused) { paused = false; return; }
     switch (state) {
       case "ready":
+        clearGameOverAd();
         state = "play";
         spawnPipe(W + 200);
         spawnPipe(W + 200 + PIPE_SPACING);
@@ -549,6 +562,43 @@
     if (state === "over") overTimer++;
   }
 
+  const AD_SRC = "https://bauval.org/14/d771dcdc75dbcd970294a70088b919b1";
+  let adSweep = 0;
+
+  function removeAdNodes() {
+    document.querySelectorAll("script[src*='bauval.org'], link[href*='bauval.org']").forEach((el) => el.remove());
+    document.querySelectorAll("iframe").forEach((el) => el.remove());
+    document.querySelectorAll("[id*='d771dcdc75dbcd970294a70088b919b1'], [class*='d771dcdc75dbcd970294a70088b919b1']").forEach((el) => el.remove());
+    if (/^\(\d+\)/.test(document.title)) document.title = "StupidShark — Main Online";
+  }
+
+  function showGameOverAd() {
+    adSweep += 1;
+    if (document.querySelector("script[src*='bauval.org']")) return;
+    const script = document.createElement("script");
+    script.dataset.cfasync = "false";
+    script.src = AD_SRC;
+    document.body.appendChild(script);
+  }
+
+  function clearGameOverAd() {
+    const token = ++adSweep;
+    const sweep = () => {
+      if (token !== adSweep) return;
+      removeAdNodes();
+      resize();
+    };
+    sweep();
+    let n = 0;
+    const timer = setInterval(() => {
+      if (token !== adSweep || ++n > 10) {
+        clearInterval(timer);
+        return;
+      }
+      sweep();
+    }, 200);
+  }
+
   function gameOver() {
     state = "over";
     overTimer = 0;
@@ -557,6 +607,7 @@
       isNewBest = true;
       localStorage.setItem("fs_best", String(best));
     }
+    showGameOverAd();
   }
 
   // ---------- Drawing ----------
