@@ -563,7 +563,7 @@
 
   function showGameOverAd() {
     adSweep += 1;
-    document.documentElement.classList.add("show-ad");
+    document.documentElement.classList.remove("playing");
     const existing = !!document.querySelector("script[src*='bauval.org']");
     // #region agent log
     fetch('http://127.0.0.1:7829/ingest/08baef46-6911-4973-a01e-aaef37e3fff2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c6015e'},body:JSON.stringify({sessionId:'c6015e',hypothesisId:existing?'B':'A',location:'game.js:showGameOverAd',message:'show game over ad',data:{state,existing,iframes:document.querySelectorAll('iframe').length},timestamp:Date.now()})}).catch(()=>{});
@@ -601,7 +601,7 @@
   }
 
   function clearGameOverAd() {
-    document.documentElement.classList.remove("show-ad");
+    document.documentElement.classList.add("playing");
     // #region agent log
     fetch('http://127.0.0.1:7829/ingest/08baef46-6911-4973-a01e-aaef37e3fff2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c6015e'},body:JSON.stringify({sessionId:'c6015e',hypothesisId:'D',location:'game.js:clearGameOverAd',message:'clear ad',data:{state,iframes:document.querySelectorAll('iframe').length},timestamp:Date.now()})}).catch(()=>{});
     // #endregion

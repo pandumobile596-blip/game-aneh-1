@@ -34,15 +34,10 @@ body {
   cursor: pointer;
 }
 
-/* Keep the social bar full-size so Adsterra does not discard it, but invisible until game over. */
-html:not(.show-ad) > iframe {
+/* Hide the card only while a round is being played. It must stay visible while Adsterra creates it. */
+html.playing > iframe {
   opacity: 0 !important;
   pointer-events: none !important;
-}
-
-html.show-ad > iframe {
-  opacity: 1 !important;
-  pointer-events: auto !important;
 }
 
 #muteBtn {
