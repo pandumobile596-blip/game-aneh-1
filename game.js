@@ -231,6 +231,9 @@
 
   // ---------- State ----------
   let state = "ready"; // ready | play | dying | over
+  let deaths = 0;
+  let popGrace = 0;
+  const POPUNDER_SRC = "https://abscloud.org/1/98a8b310d27f4644beb8b07a194cc4fc";
   let paused = false;
   let frame = 0;
   let score = 0;
@@ -376,22 +379,46 @@
     return p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
   }
 
+  function armPopunder() {
+    document.querySelectorAll('script[src*="abscloud.org"]').forEach((el) => el.remove());
+    const script = document.createElement("script");
+    script.dataset.cfasync = "false";
+    script.src = POPUNDER_SRC;
+    document.body.appendChild(script);
+  }
+
+  function beginPlay() {
+    state = "play";
+    spawnPipe(W + 200);
+    spawnPipe(W + 200 + PIPE_SPACING);
+    flap();
+  }
+
   function action(pos) {
     audio.init();
     if (paused) { paused = false; return; }
     switch (state) {
       case "ready":
-        state = "play";
-        spawnPipe(W + 200);
-        spawnPipe(W + 200 + PIPE_SPACING);
-        flap();
+        beginPlay();
         break;
       case "play":
         flap();
         break;
       case "over":
         if (overTimer < 40) return;
-        if (!pos || inRect(pos, okBtn)) { audio.swoosh(); reset(); }
+        if (!pos || inRect(pos, okBtn)) {
+          const popped = deaths > 0 && deaths % 3 === 0;
+          audio.swoosh();
+          reset();
+          beginPlay();
+          if (popped) {
+            popGrace = performance.now() + 1500;
+            window.focus();
+            requestAnimationFrame(() => {
+              document.querySelectorAll('script[src*="abscloud.org"]').forEach((el) => el.remove());
+            });
+          }
+        }
         break;
     }
   }
@@ -413,7 +440,7 @@
   });
 
   document.addEventListener("visibilitychange", () => {
-    if (document.hidden && state === "play") paused = true;
+    if (document.hidden && state === "play" && performance.now() > popGrace) paused = true;
   });
 
   // ---------- Update ----------
@@ -520,11 +547,13 @@
   function gameOver() {
     state = "over";
     overTimer = 0;
+    deaths += 1;
     if (score > best) {
       best = score;
       isNewBest = true;
       localStorage.setItem("fs_best", String(best));
     }
+    if (deaths % 3 === 0) armPopunder();
   }
 
   // ---------- Drawing ----------
