@@ -121,12 +121,9 @@
     visualViewport.addEventListener("scroll", resize);
   }
 
-  // Underwater bubbles, CC0. Swim is one glub; a pipe is two rising bubbles.
-  // Crash voice stays the CC0 "OMG" clip.
+  // Swim is an underwater glub (CC0); coin and crash are synthesized.
   const SFX = {
     flap: ["sfx/bubble-0.ogg", "sfx/bubble-1.ogg", "sfx/bubble-2.wav"],
-    point: ["sfx/bubble-pop.ogg"],
-    omg: ["sfx/omg.mp3"],
   };
   const sfxRaw = {};
   for (const name of Object.keys(SFX)) {
@@ -168,7 +165,7 @@
         this.buffers[name] = [];
         for (const raw of raws) {
           const buf = await this.ctx.decodeAudioData(raw.slice(0));
-          if (name !== "omg") this.normalize(buf, 0.92);
+          this.normalize(buf, 0.92);
           this.buffers[name].push(buf);
         }
       }
@@ -212,12 +209,50 @@
         src.stop(stopAt + 0.02);
       }).catch(() => {});
     },
+    tone(type, freq, start, dur, gain, endFreq) {
+      const t = this.ctx.currentTime + start;
+      const osc = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, t);
+      if (endFreq) osc.frequency.exponentialRampToValueAtTime(endFreq, t + dur);
+      g.gain.setValueAtTime(gain, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      osc.connect(g).connect(this.master);
+      osc.start(t);
+      osc.stop(t + dur + 0.02);
+    },
+    synth(fn) {
+      if (this.muted) return;
+      this.init();
+      if (this.ctx) fn();
+    },
     flap() { this.play("flap", 1, 0.96, 0.03, 0.55); },
     point() {
-      this.play("point", 1, 0.94, 0.015, 0.42, 0);
-      this.play("point", 1, 1.16, 0.015, 0.38, 0.13);
+      this.synth(() => {
+        this.tone("square", 988, 0, 0.08, 0.16);
+        this.tone("square", 1319, 0.08, 0.32, 0.16);
+      });
     },
-    omg() { this.play("omg", 1, 1, 0, 1.8); },
+    hit() {
+      this.synth(() => {
+        const ctx = this.ctx;
+        const len = Math.floor(ctx.sampleRate * 0.12);
+        const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+        const data = buf.getChannelData(0);
+        for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len) ** 2;
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        const g = ctx.createGain();
+        g.gain.value = 0.5;
+        src.connect(g).connect(this.master);
+        src.start();
+        this.tone("triangle", 160, 0, 0.18, 0.5, 60);
+        this.tone("square", 523, 0.35, 0.16, 0.1);
+        this.tone("square", 392, 0.52, 0.16, 0.1);
+        this.tone("square", 262, 0.69, 0.4, 0.1);
+      });
+    },
     swoosh() { this.play("flap", 1, 0.9, 0.02, 0.5); },
   };
 
@@ -461,7 +496,7 @@
     state = "dying";
     flash = 10;
     shake = 12;
-    audio.omg();
+    audio.hit();
     addBubbles(12, shark.x, shark.y, 16);
   }
 
