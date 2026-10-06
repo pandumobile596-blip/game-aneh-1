@@ -4,13 +4,36 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <title>StupidShark — Main Online</title>
-  <link rel="stylesheet" href="style.css?v=14" />
+  <link rel="stylesheet" href="style.css?v=16" />
 </head>
 <body>
+  <iframe class="ad-left" title="Iklan" scrolling="no" data-src="ad-side.html"></iframe>
   <div id="wrap">
     <canvas id="game" width="416" height="512"></canvas>
     <button id="muteBtn" title="Suara (M)">🔊</button>
   </div>
+  <iframe class="ad-right" title="Iklan" scrolling="no" data-src="ad-side.html"></iframe>
+  <iframe class="ad-bottom-mobile" title="Iklan" scrolling="no" data-src="ad-bottom.html"></iframe>
+  <script>
+    (function () {
+      var desktopQuery = window.matchMedia("(min-width: 768px)");
+      function arm(frame, on) {
+        var next = on ? frame.getAttribute("data-src") : "about:blank";
+        if (frame.getAttribute("src") !== next) frame.src = next;
+      }
+      function apply() {
+        var desktop = desktopQuery.matches;
+        document.querySelectorAll(".ad-left, .ad-right").forEach(function (frame) {
+          arm(frame, desktop);
+        });
+        document.querySelectorAll(".ad-bottom-mobile").forEach(function (frame) {
+          arm(frame, !desktop);
+        });
+      }
+      apply();
+      if (desktopQuery.addEventListener) desktopQuery.addEventListener("change", apply);
+    })();
+  </script>
   <script src="game.js?v=42"></script>
 </body>
 </html>
