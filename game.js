@@ -10,15 +10,21 @@
   let GROUND_Y = Math.round(H * GROUND_RATIO);
   let sceneryReady = false;
 
-  // Flappy-style hop. The opening tightens with the score, but stays clearable.
-  const PIPE_W = Math.round(BASE_W * 0.15);
-  const PIPE_GAP = Math.round(BASE_H * 0.30);
-  const PIPE_SPACING = Math.round(BASE_W * 0.55);
-  // Same hop as Flappy Bird: fixed upward speed, then a clean fall.
-  const GRAVITY = 0.25;
-  const FLAP_V = -4.6;
-  const MAX_FALL = 9;
-  const SPEED = BASE_W / 155;
+  // Same world as flappybird.io: 1.44 by 2.56, simulated at 120Hz.
+  const WORLD_W = 1.44;
+  const WORLD_H = 2.56;
+  const GRAVITY_U = 5;
+  const FLAP_U = 1.4;
+  const FALL_CAP_U = 2.2;
+  const SCROLL_U = 0.6;
+  const OPENING_GAPS = [0.62, 0.59, 0.56, 0.53, 0.5];
+
+  function ppu() {
+    return Math.min(W / WORLD_W, H / WORLD_H);
+  }
+  function pipeW() {
+    return 0.26 * ppu();
+  }
 
   function worldScale() {
     return H / BASE_H;
@@ -81,7 +87,7 @@
 
   function readyLayout() {
     if (H <= BASE_H + 8) {
-      return { title: 100, ready: 150, name: 200, tap: 300, best: 365, shark: H / 2 - 40 };
+      return { title: 100, ready: 150, name: 200, tap: 300, best: 365, shark: H / 2 };
     }
     const water = GROUND_Y;
     return {
@@ -90,7 +96,7 @@
       name: water * 0.46,
       tap: water * 0.68,
       best: water * 0.88,
-      shark: water * 0.46,
+      shark: H / 2,
     };
   }
 
@@ -102,7 +108,8 @@
     const scale = pickScale(BASE_W, nextH);
     W = BASE_W;
     H = nextH;
-    GROUND_Y = Math.round(H * GROUND_RATIO);
+    GROUND_Y = Math.min(H - 12, Math.round(H / 2 + 0.975 * ppu()));
+    shark.x = Math.round(W * 0.271);
     syncOkBtn();
     if (sceneryReady) clampScenery();
     const bw = Math.round(W * scale);
@@ -189,13 +196,40 @@
       });
     },
     flap() {
-      this.burst(0.95, 0.1);
-      this.synth(() => this.tone("triangle", 680, 0, 0.12, 0.55, 210));
+      this.synth(() => {
+        const ctx = this.ctx;
+        const now = ctx.currentTime;
+        const dur = 0.32;
+        const len = Math.max(1, Math.floor(ctx.sampleRate * dur));
+        const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+        const data = buf.getChannelData(0);
+        let brown = 0;
+        for (let i = 0; i < len; i++) {
+          const white = Math.random() * 2 - 1;
+          brown = brown * 0.92 + white * 0.08;
+          const env = Math.sin((i / len) * Math.PI);
+          data[i] = brown * env * 4.5;
+        }
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        const air = ctx.createBiquadFilter();
+        air.type = "bandpass";
+        air.Q.value = 0.55;
+        air.frequency.setValueAtTime(160, now);
+        air.frequency.linearRampToValueAtTime(720, now + 0.07);
+        air.frequency.linearRampToValueAtTime(220, now + dur);
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(1.8, now);
+        g.gain.linearRampToValueAtTime(0.0001, now + dur);
+        src.connect(air).connect(g).connect(this.master);
+        src.start(now);
+        src.stop(now + dur + 0.02);
+      });
     },
     point() {
       this.synth(() => {
-        this.tone("square", 740, 0, 0.08, 0.28);
-        this.tone("square", 988, 0.08, 0.16, 0.26);
+        this.tone("sine", 988, 0, 0.07, 0.4);
+        this.tone("sine", 1318, 0.06, 0.12, 0.34);
       });
     },
     hit() {
@@ -250,21 +284,26 @@
     p: Math.random() * 6,
   }));
 
+  let runFrames = 0;
+  let spawnCount = 0;
+
   function difficulty() {
-    return Math.min(1, Math.floor(score / 10) / 4);
+    const fromScore = score / 32;
+    const fromTime = runFrames / (60 * 42);
+    return Math.min(1, fromScore + fromTime * 0.45);
   }
 
   function scrollSpeed() {
-    return SPEED * (1 + difficulty() * 0.36);
+    return SCROLL_U * ppu() / 60;
   }
 
   function pipeSpacing() {
-    return PIPE_SPACING * (1 - difficulty() * 0.14);
+    return ppu();
   }
 
   function gapSize() {
-    const k = worldScale();
-    return (PIPE_GAP - 12 - difficulty() * 36) * k;
+    const opening = spawnCount < OPENING_GAPS.length ? OPENING_GAPS[spawnCount] : 0.47;
+    return Math.max(0.38, opening - difficulty() * 0.05) * ppu();
   }
 
   function reset() {
@@ -278,30 +317,24 @@
     shark.vy = 0;
     shark.rot = 0;
     overTimer = 0;
+    runFrames = 0;
+    spawnCount = 0;
     deep = false;
   }
 
   function spawnPipe(x) {
-    const k = worldScale();
     const gap = gapSize();
-    const topMin = H * 0.07;
-    const bottomLimit = GROUND_Y - H * 0.2;
-    const topMax = Math.max(topMin, bottomLimit - gap);
-    const v = Math.abs(FLAP_V) * k;
-    const g = GRAVITY * k;
-    const climb = (v * v) / (2 * g);
-    const frames = pipeSpacing() / scrollSpeed();
-    const taps = Math.max(2, frames / 16);
-    const reach = climb * taps * (0.48 + difficulty() * 0.2);
-    let center = topMin + gap / 2 + Math.random() * Math.max(0, topMax - topMin);
-    if (lastOpening != null) {
-      const lo = Math.max(topMin + gap / 2, lastOpening - reach);
-      const hi = Math.min(topMax + gap / 2, lastOpening + reach);
-      center = lo + Math.random() * Math.max(0, hi - lo);
-    }
+    const half = gap / 2;
+    const yHi = H / 2 + 0.2 * ppu();
+    const yLo = H / 2 - 0.8 * ppu();
+    const minC = Math.max(10 + half, yLo);
+    const maxC = Math.min(GROUND_Y - 10 - half, yHi);
+    const center = minC + Math.random() * Math.max(0, maxC - minC);
+    const openY = lastOpening == null ? center : lastOpening;
     lastOpening = center;
-    const top = center - gap / 2;
-    pipes.push({ x, top, gap, passed: false, bull: Math.random() < 0.68 });
+    const top = center - half;
+    pipes.push({ x, top, gap, passed: false, coinTaken: false, openY, bull: center < openY });
+    spawnCount++;
   }
 
   function addBubbles(n, x, y, spread = 4) {
@@ -318,7 +351,7 @@
 
   function flap() {
     const k = worldScale();
-    shark.vy = FLAP_V * k;
+    shark.vy = FLAP_U;
     audio.flap();
     const tx = shark.x - Math.cos(shark.rot) * 18 * k;
     const ty = shark.y - Math.sin(shark.rot) * 18 * k;
@@ -341,8 +374,6 @@
 
   function beginPlay() {
     state = "play";
-    spawnPipe(W + 200);
-    spawnPipe(W + 200 + PIPE_SPACING);
     flap();
   }
 
@@ -405,11 +436,29 @@
     ];
   }
 
+  function coinSpot(p) {
+    return {
+      x: p.x + pipeW() / 2,
+      y: p.top + p.gap / 2,
+      r: Math.max(14, ppu() * 0.07),
+    };
+  }
+
+  function takeCoin(p) {
+    const c = coinSpot(p);
+    return sharkCircles().some((ci) => {
+      const dx = ci.x - c.x;
+      const dy = ci.y - c.y;
+      return dx * dx + dy * dy < (ci.r + c.r) * (ci.r + c.r);
+    });
+  }
+
   function hitTest(p) {
-    const gap = p.gap || PIPE_GAP;
+    const gap = p.gap;
+    const w = pipeW();
     const rects = [
-      { x: p.x, y: 0, w: PIPE_W, h: p.top },
-      { x: p.x, y: p.top + gap, w: PIPE_W, h: GROUND_Y - p.top - gap },
+      { x: p.x, y: 0, w, h: p.top },
+      { x: p.x, y: p.top + gap, w, h: GROUND_Y - p.top - gap },
     ];
     return sharkCircles().some((ci) =>
       rects.some((rc) => {
@@ -455,38 +504,39 @@
     bubbles = bubbles.filter((b) => b.life > 0 && b.y > -10);
 
     if (state === "ready") {
-      shark.y = readyLayout().shark + Math.sin(frame / 10) * 6;
-      shark.rot = Math.sin(frame / 20) * 0.08;
-      if (frame % 40 === 0) addBubbles(1, shark.x + 18 * worldScale(), shark.y - 2, 2);
+      shark.y = readyLayout().shark + Math.sin(frame / 60 * 5) * 0.05 * ppu();
+      shark.rot = 0;
+      shark.vy = 0;
       return;
     }
 
     if (state === "play" || state === "dying") {
-      const k = worldScale();
-      shark.vy = Math.min(shark.vy + GRAVITY * k, MAX_FALL * k);
-      shark.y += shark.vy;
-      if (shark.vy < 0) shark.rot = Math.max(-0.45, shark.rot - 0.15);
-      else if (shark.vy > 3 * k) shark.rot = Math.min(Math.PI / 2, shark.rot + 0.08);
-      if (shark.y < -20 * k) { shark.y = -20 * k; shark.vy = 0; }
+      // Two 120Hz steps per frame, same order as flappybird.io.
+      // vy is world units per second, positive upward.
+      for (let i = 0; i < 2; i++) stepBird();
+      faceBird();
     }
 
     if (state === "play") {
+      runFrames++;
       for (const p of pipes) {
         p.x -= flow;
-        if (!p.passed && p.x + PIPE_W < shark.x) {
-          p.passed = true;
+        if (!p.coinTaken && takeCoin(p)) {
+          p.coinTaken = true;
           score++;
           audio.point();
         }
         if (hitTest(p)) { die(); break; }
       }
-      if (pipes.length && pipes[0].x < -PIPE_W - 10) pipes.shift();
+      if (pipes.length && pipes[0].x < -pipeW() - 10) pipes.shift();
+      const spawnX = W + ppu() * 0.12;
       const last = pipes[pipes.length - 1];
-      if (last && last.x <= W + 10 - pipeSpacing()) spawnPipe(last.x + pipeSpacing());
+      if (!last && runFrames >= 90) spawnPipe(spawnX);
+      else if (last && spawnX - last.x >= pipeSpacing()) spawnPipe(spawnX);
     }
 
-    if ((state === "play" || state === "dying") && shark.y + shark.r * worldScale() >= GROUND_Y) {
-      shark.y = GROUND_Y - shark.r * worldScale();
+    if ((state === "play" || state === "dying") && shark.y + 0.068 * ppu() >= GROUND_Y) {
+      shark.y = GROUND_Y - 0.068 * ppu();
       if (state === "play") die();
       gameOver();
     }
@@ -505,89 +555,32 @@
   }
 
   // ---------- Drawing ----------
-  function priceAt(worldX) {
-    const mid = GROUND_Y * 0.46;
-    const y = mid
-      + Math.sin(worldX * 0.017) * GROUND_Y * 0.16
-      + Math.sin(worldX * 0.0062 + 2.1) * GROUND_Y * 0.11
-      + Math.sin(worldX * 0.048) * GROUND_Y * 0.03;
-    return Math.max(36, Math.min(GROUND_Y - 28, y));
-  }
-
   function drawSea() {
-    ctx.fillStyle = "#070b0c";
+    ctx.fillStyle = "#101418";
     ctx.fillRect(0, 0, W, H);
-
-    ctx.strokeStyle = "rgba(255,255,255,0.09)";
+    ctx.strokeStyle = "rgba(255,255,255,0.05)";
     ctx.lineWidth = 1;
-    for (let i = 1; i < 6; i++) {
-      const y = (GROUND_Y / 6) * i;
+    for (let i = 1; i < 8; i++) {
+      const y = (GROUND_Y / 8) * i;
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(W, y);
       ctx.stroke();
     }
-    const col = 52;
-    const vOff = (((-groundX) % col) + col) % col;
-    for (let x = vOff - col; x < W + col; x += col) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, GROUND_Y);
-      ctx.stroke();
-    }
-
-    const step = 7;
-    const pts = [];
-    for (let x = 0; x <= W; x += step) pts.push({ x, y: priceAt(-groundX + x) });
-
-    const fill = ctx.createLinearGradient(0, GROUND_Y * 0.2, 0, GROUND_Y);
-    fill.addColorStop(0, "rgba(40, 220, 160, 0)");
-    fill.addColorStop(0.72, "rgba(40, 220, 160, 0.05)");
-    fill.addColorStop(1, "rgba(61, 255, 194, 0.18)");
-    ctx.beginPath();
-    ctx.moveTo(0, GROUND_Y);
-    pts.forEach((p) => ctx.lineTo(p.x, p.y));
-    ctx.lineTo(W, GROUND_Y);
-    ctx.closePath();
-    ctx.fillStyle = fill;
-    ctx.fill();
-
-    ctx.lineJoin = "round";
-    ctx.lineCap = "round";
-    ctx.beginPath();
-    pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
-    ctx.strokeStyle = "rgba(61, 255, 194, 0.45)";
-    ctx.lineWidth = 6;
-    ctx.shadowColor = "#3dffc2";
-    ctx.shadowBlur = 12;
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-    ctx.strokeStyle = "#f3fff9";
-    ctx.lineWidth = 2.4;
-    ctx.stroke();
-
-    ctx.font = "13px Segoe UI, Arial, sans-serif";
-    ctx.fillStyle = "rgba(214, 236, 226, 0.72)";
-    ctx.textAlign = "right";
-    ctx.textBaseline = "middle";
-    ctx.fillText("615", W - 10, GROUND_Y * 0.18);
-    ctx.fillText("420", W - 10, GROUND_Y * 0.48);
-    ctx.fillText("196", W - 10, GROUND_Y * 0.78);
   }
 
   function drawStick(x, y, h, bull, bodyAtEnd) {
     if (h < 6) return;
-    const bodyW = PIPE_W;
-    const wickX = x + PIPE_W / 2;
+    const bodyW = pipeW();
+    const wickX = x + bodyW / 2;
     const bodyH = Math.max(22, Math.min(h * 0.46, 78));
     const wickTip = Math.min(12, h * 0.16);
     const bodyY = bodyAtEnd ? y + h - bodyH - wickTip : y + wickTip;
     const color = bull ? "#178a56" : "#c4473a";
     const edge = bull ? "#9dffdf" : "#ffc1b5";
     const glow = bull ? "#3dffc2" : "#ff7a68";
-
     ctx.strokeStyle = glow;
-    ctx.lineWidth = Math.max(2, PIPE_W * 0.1);
+    ctx.lineWidth = Math.max(2, bodyW * 0.1);
     ctx.lineCap = "butt";
     ctx.shadowColor = glow;
     ctx.shadowBlur = 4;
@@ -596,43 +589,71 @@
     ctx.lineTo(wickX, y + h);
     ctx.stroke();
     ctx.shadowBlur = 0;
-
     ctx.fillStyle = color;
     ctx.fillRect(x, bodyY, bodyW, bodyH);
     ctx.strokeStyle = edge;
     ctx.lineWidth = 1.5;
     ctx.strokeRect(x + 0.75, bodyY + 0.75, bodyW - 1.5, bodyH - 1.5);
-
     ctx.fillStyle = "rgba(255,255,255,0.18)";
     ctx.fillRect(x + 3, bodyY + 3, Math.max(2, bodyW * 0.16), Math.max(4, bodyH - 6));
   }
 
   function drawPipe(p) {
-    const bottomY = p.top + (p.gap || PIPE_GAP);
+    const bottomY = p.top + p.gap;
     drawStick(p.x, 0, p.top, p.bull, true);
     drawStick(p.x, bottomY, Math.max(0, GROUND_Y - bottomY), p.bull, false);
   }
 
+  function drawCoins() {
+    for (const p of pipes) {
+      if (p.coinTaken) continue;
+      const c = coinSpot(p);
+      text("$", c.x, c.y, Math.max(26, ppu() * 0.13), "#f0c43a", "center", "#3d2a06");
+    }
+  }
+
+  function drawPriceLine() {
+    if (!pipes.length) return;
+    ctx.beginPath();
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.strokeStyle = "#e7eef6";
+    ctx.lineWidth = 2;
+    const first = pipes[0];
+    const firstY = first.top + first.gap / 2;
+    ctx.moveTo(first.x + pipeW() / 2, firstY);
+    for (let i = 1; i < pipes.length; i++) {
+      const p = pipes[i];
+      ctx.lineTo(p.x + pipeW() / 2, p.top + p.gap / 2);
+    }
+    const last = pipes[pipes.length - 1];
+    ctx.lineTo(W + 24, last.top + last.gap / 2);
+    ctx.stroke();
+  }
+
+  function stepBird() {
+    const dt = 1 / 120;
+    if (shark.vy < -FALL_CAP_U) shark.vy = -FALL_CAP_U;
+    shark.vy -= GRAVITY_U * dt;
+    shark.y -= shark.vy * ppu() * dt;
+  }
+
+  function faceBird() {
+    const worldRot = shark.vy > 0
+      ? Math.PI / 8
+      : Math.max(-Math.PI / 2, Math.PI / 8 + shark.vy * 0.5);
+    shark.rot = -worldRot;
+  }
+
   function drawGround() {
-    ctx.fillStyle = "#050807";
+    ctx.fillStyle = "#0b0e12";
     ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y);
-    ctx.strokeStyle = "#1f8f5f";
+    ctx.strokeStyle = "#2a3340";
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(0, GROUND_Y + 1);
     ctx.lineTo(W, GROUND_Y + 1);
     ctx.stroke();
-
-    ctx.strokeStyle = "rgba(61,255,194,0.35)";
-    ctx.lineWidth = 1;
-    const tick = 28;
-    const off = (((-groundX) % tick) + tick) % tick;
-    for (let x = off - tick; x < W + tick; x += tick) {
-      ctx.beginPath();
-      ctx.moveTo(x, GROUND_Y);
-      ctx.lineTo(x, GROUND_Y + 7);
-      ctx.stroke();
-    }
   }
 
 
@@ -648,7 +669,7 @@
   function drawShark() {
     const alive = state === "ready" || state === "play";
     const dead = state === "dying" || state === "over";
-    const tailSwing = alive ? Math.sin(frame / 4) * 0.28 : 0.12;
+    const tailSwing = alive ? Math.sin(frame / 4) * 0.08 : 0.04;
 
     ctx.save();
     ctx.translate(shark.x, shark.y);
@@ -818,7 +839,7 @@
     const medalX = panelX + 52;
     const scoreX = panelX + panelW - 24;
     text("MEDAL", medalX, py + 22, 12, "#7dcea0", "center", "#04110c");
-    text("SCORE", scoreX, py + 22, 12, "#7dcea0", "center", "#04110c");
+    text("COINS", scoreX, py + 22, 12, "#7dcea0", "center", "#04110c");
     text("BEST", scoreX, py + 66, 12, "#7dcea0", "center", "#04110c");
 
     const shown = overTimer > 25 ? Math.min(score, Math.floor((overTimer - 25) / 2)) : 0;
@@ -861,12 +882,15 @@
 
     drawSea();
     pipes.forEach(drawPipe);
+    drawPriceLine();
+    drawCoins();
     drawGround();
     drawBubbles();
     drawShark();
 
     if (state === "play" || state === "dying") {
-      text(String(score), W / 2, H * 0.11, Math.round(52 * worldScale()), "#f4fff9", "center", "#04110c");
+      const size = Math.round(20 * worldScale());
+      text("$" + score, 16, 28 * worldScale(), size, "#f0c43a", "left", "#04110c");
     }
     if (state === "ready") drawReady();
     if (state === "over") drawOver();
