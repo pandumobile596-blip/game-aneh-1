@@ -19,11 +19,24 @@
   const SCROLL_U = 0.6;
   const OPENING_GAPS = [0.62, 0.59, 0.56, 0.53, 0.5];
 
+  const BIRD_R_U = 0.068;
+  const PIPE_W_U = 0.26;
+  const SPAWN_X_U = 1.2;
+  const FIRST_PIPE_STEPS = 180;
+  const SIM_HZ = 120;
+
   function ppu() {
     return Math.min(W / WORLD_W, H / WORLD_H);
   }
   function pipeW() {
-    return 0.26 * ppu();
+    return PIPE_W_U * ppu();
+  }
+  // Camera framing: frame is at most 1.92 units wide, shifted so the first
+  // pipe enters just off the right edge.
+  function birdScreenX() {
+    const frameW = Math.min(W / ppu(), WORLD_H * 0.75);
+    const shift = Math.min(Math.max(SPAWN_X_U - PIPE_W_U / 2 - frameW / 2 - 0.02, 0), 0.33);
+    return W / 2 - shift * ppu();
   }
 
   function worldScale() {
@@ -109,7 +122,7 @@
     W = BASE_W;
     H = nextH;
     GROUND_Y = Math.min(H - 12, Math.round(H / 2 + 0.975 * ppu()));
-    shark.x = Math.round(W * 0.271);
+    shark.x = birdScreenX();
     syncOkBtn();
     if (sceneryReady) clampScenery();
     const bw = Math.round(W * scale);
@@ -252,16 +265,17 @@
     p: Math.random() * 6,
   }));
 
-  let runFrames = 0;
+  let runSteps = 0;
   let spawnCount = 0;
 
   function pressure() {
-    const seconds = runFrames / 60;
+    const seconds = runSteps / SIM_HZ;
     return Math.log2(1 + score / 6) + Math.log2(1 + seconds / 20) * 0.4;
   }
 
-  function scrollSpeed() {
-    return (SCROLL_U * ppu() / 60) * (1 + pressure() * 0.16);
+  // Pixels per 120Hz step.
+  function scrollStep() {
+    return (SCROLL_U * ppu() / SIM_HZ) * (1 + pressure() * 0.16);
   }
 
   function pipeSpacing() {
@@ -283,12 +297,17 @@
     shark.vy = 0;
     shark.rot = 0;
     overTimer = 0;
-    runFrames = 0;
+    runSteps = 0;
     spawnCount = 0;
     deep = false;
   }
 
-  function spawnPipe(x) {
+  function spawnCenterX() {
+    return shark.x + SPAWN_X_U * ppu();
+  }
+
+  function spawnPipe(cx) {
+    const x = cx - pipeW() / 2;
     const gap = gapSize();
     const half = gap / 2;
     const spread = Math.min(0.45, pressure() * 0.035);
@@ -377,47 +396,24 @@
   });
 
   // ---------- Update ----------
-  // Shark hitbox: two circles along the body axis (head + torso).
-  function sharkCircles() {
-    const k = worldScale();
-    const c = Math.cos(shark.rot), s = Math.sin(shark.rot);
-    return [
-      { x: shark.x + c * 6 * k, y: shark.y + s * 6 * k, r: 7 * k },
-      { x: shark.x - c * 6 * k, y: shark.y - s * 6 * k, r: 6.5 * k },
-    ];
-  }
-
   function coinSpot(p) {
-    return {
-      x: p.x + pipeW() / 2,
-      y: p.top + p.gap / 2,
-      r: Math.max(14, ppu() * 0.07),
-    };
+    return { x: p.x + pipeW() / 2, y: p.top + p.gap / 2 };
   }
 
-  function takeCoin(p) {
-    const c = coinSpot(p);
-    return sharkCircles().some((ci) => {
-      const dx = ci.x - c.x;
-      const dy = ci.y - c.y;
-      return dx * dx + dy * dy < (ci.r + c.r) * (ci.r + c.r);
-    });
-  }
-
+  // One circle against the two pipe columns; the top column has no ceiling.
   function hitTest(p) {
-    const gap = p.gap;
-    const w = pipeW();
-    const rects = [
-      { x: p.x, y: 0, w, h: p.top },
-      { x: p.x, y: p.top + gap, w, h: GROUND_Y - p.top - gap },
-    ];
-    return sharkCircles().some((ci) =>
-      rects.some((rc) => {
-        const cx = Math.max(rc.x, Math.min(ci.x, rc.x + rc.w));
-        const cy = Math.max(rc.y, Math.min(ci.y, rc.y + rc.h));
-        return (ci.x - cx) ** 2 + (ci.y - cy) ** 2 < ci.r * ci.r;
-      })
-    );
+    const r = BIRD_R_U * ppu();
+    const left = p.x;
+    const right = p.x + pipeW();
+    const dx = shark.x - Math.max(left, Math.min(shark.x, right));
+    if (Math.abs(dx) >= r) return false;
+    const gapTop = p.top;
+    const gapBot = p.top + p.gap;
+    const nearTop = Math.min(shark.y, gapTop);
+    const nearBot = Math.max(shark.y, gapBot);
+    const dyTop = shark.y - nearTop;
+    const dyBot = shark.y - nearBot;
+    return dx * dx + dyTop * dyTop < r * r || dx * dx + dyBot * dyBot < r * r;
   }
 
   function die() {
@@ -432,11 +428,8 @@
     if (flash > 0) flash--;
     if (shake > 0) shake--;
 
-    const moving = state === "ready" || state === "play";
-    const flow = scrollSpeed();
-    if (moving) groundX -= flow;
-
     if (state === "ready") {
+      groundX -= scrollStep() * 2;
       shark.y = readyLayout().shark + Math.sin(frame / 60 * 5) * 0.05 * ppu();
       shark.rot = 0;
       shark.vy = 0;
@@ -444,37 +437,57 @@
     }
 
     if (state === "play" || state === "dying") {
-      // Two 120Hz steps per frame, same order as flappybird.io.
-      // vy is world units per second, positive upward.
-      for (let i = 0; i < 2; i++) stepBird();
+      for (let i = 0; i < 2 && (state === "play" || state === "dying"); i++) simStep();
+    }
+
+    if (state === "over") overTimer++;
+  }
+
+  // One 120Hz tick: bird, ground, pipe hits, scroll and spawn, then tilt.
+  function simStep() {
+    if (shark.vy < -FALL_CAP_U) shark.vy = -FALL_CAP_U;
+    shark.vy -= GRAVITY_U / SIM_HZ;
+    shark.y -= (shark.vy / SIM_HZ) * ppu();
+
+    const r = BIRD_R_U * ppu();
+    if (shark.y + r > GROUND_Y) {
+      shark.y = GROUND_Y - r;
+      shark.vy = 0;
+      if (state === "play") die();
       faceBird();
+      gameOver();
+      return;
     }
 
     if (state === "play") {
-      runFrames++;
+      for (const p of pipes) {
+        if (hitTest(p)) { die(); break; }
+      }
+    }
+
+    if (state === "play") {
+      const flow = scrollStep();
+      groundX -= flow;
+      const cx = spawnCenterX();
+      const last = pipes[pipes.length - 1];
+      const due = last
+        ? cx - (last.x + pipeW() / 2) >= pipeSpacing()
+        : runSteps >= FIRST_PIPE_STEPS;
+      if (due) spawnPipe(cx);
       for (const p of pipes) {
         p.x -= flow;
-        if (!p.coinTaken && takeCoin(p)) {
+        if (!p.passed && p.x + pipeW() / 2 <= shark.x) {
+          p.passed = true;
           p.coinTaken = true;
           score++;
           audio.point();
         }
-        if (hitTest(p)) { die(); break; }
       }
-      if (pipes.length && pipes[0].x < -pipeW() - 10) pipes.shift();
-      const spawnX = W + ppu() * 0.12;
-      const last = pipes[pipes.length - 1];
-      if (!last && runFrames >= 90) spawnPipe(spawnX);
-      else if (last && spawnX - last.x >= pipeSpacing()) spawnPipe(spawnX);
+      if (pipes.length && pipes[0].x + pipeW() / 2 < shark.x - SPAWN_X_U * ppu()) pipes.shift();
+      runSteps++;
     }
 
-    if ((state === "play" || state === "dying") && shark.y + 0.068 * ppu() >= GROUND_Y) {
-      shark.y = GROUND_Y - 0.068 * ppu();
-      if (state === "play") die();
-      gameOver();
-    }
-
-    if (state === "over") overTimer++;
+    faceBird();
   }
 
   function gameOver() {
@@ -564,20 +577,12 @@
     ctx.stroke();
   }
 
-  function stepBird() {
-    const dt = 1 / 120;
-    if (shark.vy < -FALL_CAP_U) shark.vy = -FALL_CAP_U;
-    shark.vy -= GRAVITY_U * dt;
-    shark.y -= shark.vy * ppu() * dt;
-  }
-
+  // Nose up a fixed 22.5° while rising; while falling it tips with speed, up to straight down.
   function faceBird() {
-    const rising = shark.vy > 0.05;
-    const worldRot = rising
-      ? 0.7
-      : Math.max(-1.05, 0.7 + shark.vy * 0.75);
-    const target = -worldRot;
-    shark.rot += (target - shark.rot) * 0.5;
+    const worldRot = shark.vy > 0
+      ? Math.PI / 8
+      : Math.max(-Math.PI / 2, Math.PI / 8 + shark.vy * 0.5);
+    shark.rot = -worldRot;
   }
 
   function drawGround() {
@@ -600,7 +605,8 @@
     ctx.save();
     ctx.translate(shark.x, shark.y);
     ctx.rotate(shark.rot);
-    ctx.scale(worldScale() * 0.8, worldScale() * 0.8);
+    const s = (ppu() / 200) * 0.8;
+    ctx.scale(s, s);
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
     ctx.strokeStyle = "#0a0a0a";
