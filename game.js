@@ -138,11 +138,11 @@
         if (!AC) return;
         this.ctx = new AC();
         this.master = this.ctx.createGain();
-        this.master.gain.value = 1;
+        this.master.gain.value = 0.28;
         const comp = this.ctx.createDynamicsCompressor();
-        comp.threshold.value = -8;
-        comp.knee.value = 6;
-        comp.ratio.value = 4;
+        comp.threshold.value = -28;
+        comp.knee.value = 8;
+        comp.ratio.value = 1.6;
         comp.attack.value = 0.002;
         comp.release.value = 0.08;
         this.master.connect(comp).connect(this.ctx.destination);
@@ -195,48 +195,18 @@
         src.stop(now + dur + 0.02);
       });
     },
-    flap() {
-      this.synth(() => {
-        const ctx = this.ctx;
-        const now = ctx.currentTime;
-        const dur = 0.32;
-        const len = Math.max(1, Math.floor(ctx.sampleRate * dur));
-        const buf = ctx.createBuffer(1, len, ctx.sampleRate);
-        const data = buf.getChannelData(0);
-        let brown = 0;
-        for (let i = 0; i < len; i++) {
-          const white = Math.random() * 2 - 1;
-          brown = brown * 0.92 + white * 0.08;
-          const env = Math.sin((i / len) * Math.PI);
-          data[i] = brown * env * 4.5;
-        }
-        const src = ctx.createBufferSource();
-        src.buffer = buf;
-        const air = ctx.createBiquadFilter();
-        air.type = "bandpass";
-        air.Q.value = 0.55;
-        air.frequency.setValueAtTime(160, now);
-        air.frequency.linearRampToValueAtTime(720, now + 0.07);
-        air.frequency.linearRampToValueAtTime(220, now + dur);
-        const g = ctx.createGain();
-        g.gain.setValueAtTime(1.8, now);
-        g.gain.linearRampToValueAtTime(0.0001, now + dur);
-        src.connect(air).connect(g).connect(this.master);
-        src.start(now);
-        src.stop(now + dur + 0.02);
-      });
-    },
+    flap() {},
     point() {
       this.synth(() => {
-        this.tone("sine", 988, 0, 0.07, 0.4);
-        this.tone("sine", 1318, 0.06, 0.12, 0.34);
+        this.tone("sine", 988, 0, 0.07, 0.16);
+        this.tone("sine", 1318, 0.06, 0.12, 0.12);
       });
     },
     hit() {
-      this.burst(1, 0.18);
-      this.synth(() => this.tone("triangle", 240, 0, 0.22, 0.6, 70));
+      this.burst(0.28, 0.16);
+      this.synth(() => this.tone("triangle", 240, 0, 0.22, 0.18, 70));
     },
-    swoosh() { this.burst(0.75, 0.16); },
+    swoosh() { this.burst(0.2, 0.14); },
   };
 
   function updateMuteBtn() { muteBtn.textContent = audio.muted ? "🔇" : "🔊"; }
@@ -264,8 +234,6 @@
 
   const shark = { x: Math.round(BASE_W * 0.22), y: 0, vy: 0, rot: 0, r: 8 };
   const okBtn = { x: W / 2 - 52, y: 330, w: 104, h: 36 };
-
-  let bubbles = [];
   const plankton = Array.from({ length: 45 }, () => ({
     x: Math.random() * W,
     y: Math.random() * GROUND_Y,
@@ -287,23 +255,22 @@
   let runFrames = 0;
   let spawnCount = 0;
 
-  function difficulty() {
-    const fromScore = score / 32;
-    const fromTime = runFrames / (60 * 42);
-    return Math.min(1, fromScore + fromTime * 0.45);
+  function pressure() {
+    const seconds = runFrames / 60;
+    return Math.log2(1 + score / 6) + Math.log2(1 + seconds / 20) * 0.4;
   }
 
   function scrollSpeed() {
-    return SCROLL_U * ppu() / 60;
+    return (SCROLL_U * ppu() / 60) * (1 + pressure() * 0.16);
   }
 
   function pipeSpacing() {
-    return ppu();
+    return ppu() * Math.max(0.52, 1 - pressure() * 0.04);
   }
 
   function gapSize() {
     const opening = spawnCount < OPENING_GAPS.length ? OPENING_GAPS[spawnCount] : 0.47;
-    return Math.max(0.38, opening - difficulty() * 0.05) * ppu();
+    return Math.max(0.29, opening - pressure() * 0.022) * ppu();
   }
 
   function reset() {
@@ -312,7 +279,6 @@
     isNewBest = false;
     pipes = [];
     lastOpening = null;
-    bubbles = [];
     shark.y = readyLayout().shark;
     shark.vy = 0;
     shark.rot = 0;
@@ -325,8 +291,9 @@
   function spawnPipe(x) {
     const gap = gapSize();
     const half = gap / 2;
-    const yHi = H / 2 + 0.2 * ppu();
-    const yLo = H / 2 - 0.8 * ppu();
+    const spread = Math.min(0.45, pressure() * 0.035);
+    const yHi = H / 2 + (0.2 + spread) * ppu();
+    const yLo = H / 2 - (0.8 + spread * 0.6) * ppu();
     const minC = Math.max(10 + half, yLo);
     const maxC = Math.min(GROUND_Y - 10 - half, yHi);
     const center = minC + Math.random() * Math.max(0, maxC - minC);
@@ -337,25 +304,9 @@
     spawnCount++;
   }
 
-  function addBubbles(n, x, y, spread = 4) {
-    for (let i = 0; i < n; i++) {
-      bubbles.push({
-        x: x + (Math.random() - 0.5) * spread,
-        y: y + (Math.random() - 0.5) * spread,
-        r: 1.5 + Math.random() * 2.5,
-        vy: -0.4 - Math.random() * 0.8,
-        life: 60 + Math.random() * 40,
-      });
-    }
-  }
-
   function flap() {
-    const k = worldScale();
     shark.vy = FLAP_U;
     audio.flap();
-    const tx = shark.x - Math.cos(shark.rot) * 18 * k;
-    const ty = shark.y - Math.sin(shark.rot) * 18 * k;
-    addBubbles(4, tx, ty, 4 * k);
   }
 
   // ---------- Input ----------
@@ -474,7 +425,6 @@
     flash = 10;
     shake = 12;
     audio.hit();
-    addBubbles(12, shark.x, shark.y, 16);
   }
 
   function update() {
@@ -484,24 +434,7 @@
 
     const moving = state === "ready" || state === "play";
     const flow = scrollSpeed();
-    if (moving) {
-      groundX -= flow;
-      fishes.forEach((f) => {
-        f.x -= f.s;
-        if (f.x < -20) {
-          f.x = W + 20;
-          f.y = 70 + Math.random() * Math.max(80, GROUND_Y * 0.55);
-        }
-      });
-      weeds.forEach((w) => { w.x -= flow; if (w.x < -10) w.x += W + 30; });
-    }
-
-    for (const b of bubbles) {
-      b.y += b.vy;
-      b.x += Math.sin((frame + b.y) / 10) * 0.3 - (moving ? flow * 0.5 : 0);
-      b.life--;
-    }
-    bubbles = bubbles.filter((b) => b.life > 0 && b.y > -10);
+    if (moving) groundX -= flow;
 
     if (state === "ready") {
       shark.y = readyLayout().shark + Math.sin(frame / 60 * 5) * 0.05 * ppu();
@@ -639,10 +572,12 @@
   }
 
   function faceBird() {
-    const worldRot = shark.vy > 0
-      ? Math.PI / 8
-      : Math.max(-Math.PI / 2, Math.PI / 8 + shark.vy * 0.5);
-    shark.rot = -worldRot;
+    const rising = shark.vy > 0.05;
+    const worldRot = rising
+      ? 0.7
+      : Math.max(-1.05, 0.7 + shark.vy * 0.75);
+    const target = -worldRot;
+    shark.rot += (target - shark.rot) * 0.5;
   }
 
   function drawGround() {
@@ -657,15 +592,6 @@
   }
 
 
-  function drawBubbles() {
-    bubbles.forEach((b) => {
-      ctx.globalAlpha = Math.min(1, b.life / 30) * 0.85;
-      ctx.fillStyle = "#b8ffe8";
-      ctx.fillRect(b.x, b.y, 2.2, 2.2);
-    });
-    ctx.globalAlpha = 1;
-  }
-
   function drawShark() {
     const alive = state === "ready" || state === "play";
     const dead = state === "dying" || state === "over";
@@ -674,11 +600,11 @@
     ctx.save();
     ctx.translate(shark.x, shark.y);
     ctx.rotate(shark.rot);
-    ctx.scale(worldScale() * 0.72, worldScale() * 0.72);
+    ctx.scale(worldScale() * 0.8, worldScale() * 0.8);
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
-    ctx.strokeStyle = "#161616";
-    ctx.lineWidth = 1.6;
+    ctx.strokeStyle = "#0a0a0a";
+    ctx.lineWidth = 2.4;
 
     ctx.save();
     ctx.translate(-15, 0);
@@ -702,7 +628,7 @@
     ctx.fill();
     ctx.stroke();
 
-    ctx.fillStyle = "#f2f2f2";
+    ctx.fillStyle = "#f7f7f7";
     ctx.beginPath();
     ctx.moveTo(-15, 0);
     ctx.quadraticCurveTo(-6, -11, 8, -9);
@@ -885,7 +811,6 @@
     drawPriceLine();
     drawCoins();
     drawGround();
-    drawBubbles();
     drawShark();
 
     if (state === "play" || state === "dying") {
