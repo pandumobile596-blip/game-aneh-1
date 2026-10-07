@@ -121,93 +121,26 @@
     visualViewport.addEventListener("scroll", resize);
   }
 
-  // Swim is an underwater glub (CC0); coin and crash are synthesized.
-  const SFX = {
-    flap: ["sfx/bubble-0.ogg", "sfx/bubble-1.ogg", "sfx/bubble-2.wav"],
-  };
-  const sfxRaw = {};
-  for (const name of Object.keys(SFX)) {
-    sfxRaw[name] = Promise.all(SFX[name].map((url) => fetch(url).then((r) => {
-      if (!r.ok) throw new Error(url);
-      return r.arrayBuffer();
-    })));
-  }
-
   const audio = {
     ctx: null,
     master: null,
     muted: localStorage.getItem("fs_muted") === "1",
-    buffers: {},
-    last: {},
-    ready: null,
     init() {
       if (!this.ctx) {
         const AC = window.AudioContext || window.webkitAudioContext;
-        if (!AC) return Promise.resolve();
+        if (!AC) return;
         this.ctx = new AC();
         this.master = this.ctx.createGain();
-        this.master.gain.value = 1.35;
+        this.master.gain.value = 1;
         const comp = this.ctx.createDynamicsCompressor();
         comp.threshold.value = -8;
-        comp.knee.value = 8;
-        comp.ratio.value = 3;
-        comp.attack.value = 0.003;
-        comp.release.value = 0.12;
+        comp.knee.value = 6;
+        comp.ratio.value = 4;
+        comp.attack.value = 0.002;
+        comp.release.value = 0.08;
         this.master.connect(comp).connect(this.ctx.destination);
-        this.ready = this.decode();
       }
       if (this.ctx.state === "suspended") this.ctx.resume();
-      return this.ready || Promise.resolve();
-    },
-    async decode() {
-      for (const name of Object.keys(SFX)) {
-        const raws = await sfxRaw[name];
-        this.buffers[name] = [];
-        for (const raw of raws) {
-          const buf = await this.ctx.decodeAudioData(raw.slice(0));
-          this.normalize(buf, 0.92);
-          this.buffers[name].push(buf);
-        }
-      }
-    },
-    normalize(buf, target) {
-      let peak = 0;
-      for (let c = 0; c < buf.numberOfChannels; c++) {
-        const data = buf.getChannelData(c);
-        for (let i = 0; i < data.length; i++) peak = Math.max(peak, Math.abs(data[i]));
-      }
-      if (peak < 0.001) return;
-      const g = target / peak;
-      if (g > 0.98 && g < 1.02) return;
-      for (let c = 0; c < buf.numberOfChannels; c++) {
-        const data = buf.getChannelData(c);
-        for (let i = 0; i < data.length; i++) data[i] *= g;
-      }
-    },
-    play(name, gain, rate, vary, maxDur, delay) {
-      if (this.muted) return;
-      this.init().then(() => {
-        if (this.muted || !this.ctx) return;
-        const list = this.buffers[name];
-        if (!list || !list.length) return;
-        let i = Math.floor(Math.random() * list.length);
-        if (list.length > 1 && i === this.last[name]) i = (i + 1) % list.length;
-        this.last[name] = i;
-        const src = this.ctx.createBufferSource();
-        src.buffer = list[i];
-        const playback = rate * (1 + (Math.random() * 2 - 1) * vary);
-        src.playbackRate.value = playback;
-        const g = this.ctx.createGain();
-        const now = this.ctx.currentTime + (delay || 0);
-        const heard = Math.min(src.buffer.duration, maxDur);
-        const stopAt = now + heard / playback;
-        g.gain.setValueAtTime(gain, now);
-        g.gain.setValueAtTime(gain, Math.max(now, stopAt - 0.05));
-        g.gain.linearRampToValueAtTime(0.001, stopAt);
-        src.connect(g).connect(this.master);
-        src.start(now);
-        src.stop(stopAt + 0.02);
-      }).catch(() => {});
     },
     tone(type, freq, start, dur, gain, endFreq) {
       const t = this.ctx.currentTime + start;
@@ -215,9 +148,9 @@
       const g = this.ctx.createGain();
       osc.type = type;
       osc.frequency.setValueAtTime(freq, t);
-      if (endFreq) osc.frequency.exponentialRampToValueAtTime(endFreq, t + dur);
-      g.gain.setValueAtTime(gain, t);
-      g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      if (endFreq) osc.frequency.exponentialRampToValueAtTime(Math.max(40, endFreq), t + dur);
+      g.gain.setValueAtTime(Math.max(gain, 0.0001), t);
+      g.gain.linearRampToValueAtTime(0.0001, t + dur);
       osc.connect(g).connect(this.master);
       osc.start(t);
       osc.stop(t + dur + 0.02);
@@ -225,35 +158,51 @@
     synth(fn) {
       if (this.muted) return;
       this.init();
-      if (this.ctx) fn();
+      if (!this.ctx) return;
+      const run = () => { try { fn(); } catch (err) { /* skip a failed blip */ } };
+      if (this.ctx.state === "running") run();
+      else {
+        const pending = this.ctx.resume();
+        if (pending && pending.then) pending.then(run);
+        else run();
+      }
     },
-    flap() { this.play("flap", 1, 0.96, 0.03, 0.55); },
-    point() {
-      this.synth(() => {
-        this.tone("square", 988, 0, 0.08, 0.16);
-        this.tone("square", 1319, 0.08, 0.32, 0.16);
-      });
-    },
-    hit() {
+    burst(gain, dur) {
       this.synth(() => {
         const ctx = this.ctx;
-        const len = Math.floor(ctx.sampleRate * 0.12);
+        const now = ctx.currentTime;
+        const len = Math.max(1, Math.floor(ctx.sampleRate * dur));
         const buf = ctx.createBuffer(1, len, ctx.sampleRate);
         const data = buf.getChannelData(0);
-        for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len) ** 2;
+        for (let i = 0; i < len; i++) {
+          const env = 1 - i / len;
+          data[i] = (Math.random() * 2 - 1) * env;
+        }
         const src = ctx.createBufferSource();
         src.buffer = buf;
         const g = ctx.createGain();
-        g.gain.value = 0.5;
+        g.gain.setValueAtTime(gain, now);
+        g.gain.linearRampToValueAtTime(0.0001, now + dur);
         src.connect(g).connect(this.master);
-        src.start();
-        this.tone("triangle", 160, 0, 0.18, 0.5, 60);
-        this.tone("square", 523, 0.35, 0.16, 0.1);
-        this.tone("square", 392, 0.52, 0.16, 0.1);
-        this.tone("square", 262, 0.69, 0.4, 0.1);
+        src.start(now);
+        src.stop(now + dur + 0.02);
       });
     },
-    swoosh() { this.play("flap", 1, 0.9, 0.02, 0.5); },
+    flap() {
+      this.burst(0.95, 0.1);
+      this.synth(() => this.tone("triangle", 680, 0, 0.12, 0.55, 210));
+    },
+    point() {
+      this.synth(() => {
+        this.tone("square", 740, 0, 0.08, 0.28);
+        this.tone("square", 988, 0.08, 0.16, 0.26);
+      });
+    },
+    hit() {
+      this.burst(1, 0.18);
+      this.synth(() => this.tone("triangle", 240, 0, 0.22, 0.6, 70));
+    },
+    swoosh() { this.burst(0.75, 0.16); },
   };
 
   function updateMuteBtn() { muteBtn.textContent = audio.muted ? "🔇" : "🔊"; }
@@ -278,22 +227,8 @@
   let shake = 0;
   let overTimer = 0;
   let deep = false;
-  let skin = 0;
 
-  const SKINS = [
-    { name: "Hiu Selam", body: "#5b8db8", dark: "#3a6690", belly: "#eef6fb", gear: "goggles" },
-    { name: "Hiu Ninja", body: "#7a7f94", dark: "#4d5266", belly: "#f2f2f5", gear: "headband" },
-    { name: "Hiu Raja", body: "#6c5bb8", dark: "#463a8a", belly: "#f3efff", gear: "crown" },
-    { name: "Hiu Neon", body: "#1fb5a5", dark: "#0f7d72", belly: "#e4fffb", gear: "glow" },
-    { name: "Hiu Bajak", body: "#3e4a57", dark: "#222a33", belly: "#eceff1", gear: "bandana" },
-    { name: "Hiu Robot", body: "#90a4ae", dark: "#546e7a", belly: "#f7f9fa", gear: "visor" },
-    { name: "Hiu Api", body: "#ef6c00", dark: "#bf360c", belly: "#ffe0b2", gear: "flame" },
-    { name: "Hiu Es", body: "#81d4fa", dark: "#0277bd", belly: "#f5fdff", gear: "crystal" },
-    { name: "Hiu Koki", body: "#f5f0e6", dark: "#b7aa96", belly: "#fffdf8", gear: "toque" },
-    { name: "Hiu Galaksi", body: "#6a3ec8", dark: "#3d2380", belly: "#e1d5f5", gear: "planet" },
-  ];
-
-  const shark = { x: Math.round(BASE_W * 0.22), y: 0, vy: 0, rot: 0, r: 12 };
+  const shark = { x: Math.round(BASE_W * 0.22), y: 0, vy: 0, rot: 0, r: 8 };
   const okBtn = { x: W / 2 - 52, y: 330, w: 104, h: 36 };
 
   let bubbles = [];
@@ -343,8 +278,7 @@
     shark.vy = 0;
     shark.rot = 0;
     overTimer = 0;
-    deep = Math.random() < 0.4;
-    skin = Math.floor(Math.random() * SKINS.length);
+    deep = false;
   }
 
   function spawnPipe(x) {
@@ -367,13 +301,7 @@
     }
     lastOpening = center;
     const top = center - gap / 2;
-    const spots = Array.from({ length: 10 }, () => ({
-      dx: 6 + Math.random() * (PIPE_W - 12),
-      dy: Math.random(),
-      r: 2 + Math.random() * 3,
-    }));
-    const hue = Math.random() < 0.5 ? "#ff7aa8" : "#ff9d5c";
-    pipes.push({ x, top, gap, passed: false, spots, coral: hue });
+    pipes.push({ x, top, gap, passed: false, bull: Math.random() < 0.68 });
   }
 
   function addBubbles(n, x, y, spread = 4) {
@@ -472,8 +400,8 @@
     const k = worldScale();
     const c = Math.cos(shark.rot), s = Math.sin(shark.rot);
     return [
-      { x: shark.x + c * 8 * k, y: shark.y + s * 8 * k, r: 10 * k },
-      { x: shark.x - c * 8 * k, y: shark.y - s * 8 * k, r: 9 * k },
+      { x: shark.x + c * 6 * k, y: shark.y + s * 6 * k, r: 7 * k },
+      { x: shark.x - c * 6 * k, y: shark.y - s * 6 * k, r: 6.5 * k },
     ];
   }
 
@@ -525,7 +453,6 @@
       b.life--;
     }
     bubbles = bubbles.filter((b) => b.life > 0 && b.y > -10);
-    if (frame % 25 === 0) addBubbles(1, Math.random() * W, GROUND_Y + 4, 2);
 
     if (state === "ready") {
       shark.y = readyLayout().shark + Math.sin(frame / 10) * 6;
@@ -578,485 +505,254 @@
   }
 
   // ---------- Drawing ----------
+  function priceAt(worldX) {
+    const mid = GROUND_Y * 0.46;
+    const y = mid
+      + Math.sin(worldX * 0.017) * GROUND_Y * 0.16
+      + Math.sin(worldX * 0.0062 + 2.1) * GROUND_Y * 0.11
+      + Math.sin(worldX * 0.048) * GROUND_Y * 0.03;
+    return Math.max(36, Math.min(GROUND_Y - 28, y));
+  }
+
   function drawSea() {
-    const g = ctx.createLinearGradient(0, 0, 0, GROUND_Y);
-    if (deep) { g.addColorStop(0, "#04132b"); g.addColorStop(1, "#0a3550"); }
-    else { g.addColorStop(0, "#3fc1d9"); g.addColorStop(0.6, "#1a8fb8"); g.addColorStop(1, "#0f6f99"); }
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, W, GROUND_Y);
+    ctx.fillStyle = "#070b0c";
+    ctx.fillRect(0, 0, W, H);
 
-    if (!deep) {
-      // sunlight rays
-      ctx.save();
-      ctx.globalCompositeOperation = "lighter";
-      for (let i = 0; i < Math.ceil(W / 60); i++) {
-        const x = 30 + i * 60 + Math.sin(frame / 90 + i) * 12;
-        const rg = ctx.createLinearGradient(0, 0, 0, GROUND_Y * 0.8);
-        rg.addColorStop(0, "rgba(255,255,255,0.14)");
-        rg.addColorStop(1, "rgba(255,255,255,0)");
-        ctx.fillStyle = rg;
-        ctx.beginPath();
-        ctx.moveTo(x - 10, 0); ctx.lineTo(x + 14, 0);
-        ctx.lineTo(x + 50, GROUND_Y * 0.8); ctx.lineTo(x + 10, GROUND_Y * 0.8);
-        ctx.fill();
-      }
-      ctx.restore();
-      // surface ripple
-      ctx.strokeStyle = "rgba(255,255,255,0.35)";
-      ctx.lineWidth = 2;
+    ctx.strokeStyle = "rgba(255,255,255,0.09)";
+    ctx.lineWidth = 1;
+    for (let i = 1; i < 6; i++) {
+      const y = (GROUND_Y / 6) * i;
       ctx.beginPath();
-      for (let x = 0; x <= W; x += 6) ctx.lineTo(x, 4 + Math.sin(x / 14 + frame / 15) * 2);
+      ctx.moveTo(0, y);
+      ctx.lineTo(W, y);
       ctx.stroke();
-    } else {
-      plankton.forEach((p) => {
-        ctx.globalAlpha = 0.35 + 0.4 * Math.sin(frame / 25 + p.p);
-        ctx.fillStyle = "#7fffe6";
-        ctx.beginPath(); ctx.arc(p.x, p.y + Math.sin(frame / 40 + p.p) * 3, p.s, 0, Math.PI * 2); ctx.fill();
-      });
-      ctx.globalAlpha = 1;
+    }
+    const col = 52;
+    const vOff = (((-groundX) % col) + col) % col;
+    for (let x = vOff - col; x < W + col; x += col) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, GROUND_Y);
+      ctx.stroke();
     }
 
-    // distant fish silhouettes
-    ctx.fillStyle = deep ? "rgba(120,200,255,0.18)" : "rgba(0,60,100,0.25)";
-    fishes.forEach((f) => {
-      ctx.beginPath();
-      ctx.ellipse(f.x, f.y, f.size, f.size * 0.5, 0, 0, Math.PI * 2);
-      ctx.moveTo(f.x + f.size * 0.8, f.y);
-      ctx.lineTo(f.x + f.size * 1.6, f.y - f.size * 0.5);
-      ctx.lineTo(f.x + f.size * 1.6, f.y + f.size * 0.5);
-      ctx.fill();
-    });
+    const step = 7;
+    const pts = [];
+    for (let x = 0; x <= W; x += step) pts.push({ x, y: priceAt(-groundX + x) });
 
-    // far reef silhouette
-    ctx.fillStyle = deep ? "#082a40" : "#13759a";
-    const off = ((groundX * 0.3) % 60 + 60) % 60;
-    for (let x = off - 60; x < W + 60; x += 30) {
-      const k = Math.abs(Math.round((x - off) / 30)) % 4;
-      const h = [26, 40, 32, 48][k];
-      ctx.beginPath();
-      ctx.ellipse(x, GROUND_Y, 20, h, 0, Math.PI, 0);
-      ctx.fill();
-    }
+    const fill = ctx.createLinearGradient(0, GROUND_Y * 0.2, 0, GROUND_Y);
+    fill.addColorStop(0, "rgba(40, 220, 160, 0)");
+    fill.addColorStop(0.72, "rgba(40, 220, 160, 0.05)");
+    fill.addColorStop(1, "rgba(61, 255, 194, 0.18)");
+    ctx.beginPath();
+    ctx.moveTo(0, GROUND_Y);
+    pts.forEach((p) => ctx.lineTo(p.x, p.y));
+    ctx.lineTo(W, GROUND_Y);
+    ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.fill();
+
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+    ctx.strokeStyle = "rgba(61, 255, 194, 0.45)";
+    ctx.lineWidth = 6;
+    ctx.shadowColor = "#3dffc2";
+    ctx.shadowBlur = 12;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = "#f3fff9";
+    ctx.lineWidth = 2.4;
+    ctx.stroke();
+
+    ctx.font = "13px Segoe UI, Arial, sans-serif";
+    ctx.fillStyle = "rgba(214, 236, 226, 0.72)";
+    ctx.textAlign = "right";
+    ctx.textBaseline = "middle";
+    ctx.fillText("615", W - 10, GROUND_Y * 0.18);
+    ctx.fillText("420", W - 10, GROUND_Y * 0.48);
+    ctx.fillText("196", W - 10, GROUND_Y * 0.78);
   }
 
-  function drawRock(x, y, w, h, p, flipY) {
-    if (h <= 0) return;
-    const g = ctx.createLinearGradient(x, 0, x + w, 0);
-    g.addColorStop(0, "#5a4a6e");
-    g.addColorStop(0.35, "#8c79a3");
-    g.addColorStop(1, "#43355a");
-    ctx.fillStyle = g;
-    ctx.fillRect(x, y, w, h);
+  function drawStick(x, y, h, bull, bodyAtEnd) {
+    if (h < 6) return;
+    const bodyW = PIPE_W;
+    const wickX = x + PIPE_W / 2;
+    const bodyH = Math.max(22, Math.min(h * 0.46, 78));
+    const wickTip = Math.min(12, h * 0.16);
+    const bodyY = bodyAtEnd ? y + h - bodyH - wickTip : y + wickTip;
+    const color = bull ? "#178a56" : "#c4473a";
+    const edge = bull ? "#9dffdf" : "#ffc1b5";
+    const glow = bull ? "#3dffc2" : "#ff7a68";
 
-    ctx.save();
-    ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
-    ctx.fillStyle = "rgba(30,20,45,0.3)";
-    p.spots.forEach((s) => {
-      const sy = flipY ? y + h - s.dy * h : y + s.dy * h;
-      ctx.beginPath(); ctx.arc(x + s.dx, sy, s.r, 0, Math.PI * 2); ctx.fill();
-    });
-    ctx.restore();
+    ctx.strokeStyle = glow;
+    ctx.lineWidth = Math.max(2, PIPE_W * 0.1);
+    ctx.lineCap = "butt";
+    ctx.shadowColor = glow;
+    ctx.shadowBlur = 4;
+    ctx.beginPath();
+    ctx.moveTo(wickX, y);
+    ctx.lineTo(wickX, y + h);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
 
-    ctx.strokeStyle = "#2a1f3a";
-    ctx.lineWidth = 2;
-    ctx.strokeRect(x, y, w, h);
-  }
-
-  function drawCoralLip(x, y, w, h, color, dir, k) {
-    // dir: -1 = coral grows upward (bottom pillar), 1 = grows downward (top pillar)
     ctx.fillStyle = color;
-    ctx.strokeStyle = "#7a2347";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.rect(x, y, w, h);
-    ctx.fill(); ctx.stroke();
+    ctx.fillRect(x, bodyY, bodyW, bodyH);
+    ctx.strokeStyle = edge;
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(x + 0.75, bodyY + 0.75, bodyW - 1.5, bodyH - 1.5);
 
-    const edge = dir === 1 ? y + h : y;
-    const bump = 5 * k;
-    ctx.beginPath();
-    for (let i = 0; i < 5; i++) {
-      const cx = x + bump + i * ((w - bump * 2) / 4);
-      ctx.moveTo(cx + bump, edge);
-      ctx.arc(cx, edge, bump, 0, Math.PI * 2);
-    }
-    ctx.fill(); ctx.stroke();
-
-    ctx.fillStyle = "rgba(255,255,255,0.35)";
-    for (let i = 0; i < 4; i++) {
-      ctx.beginPath(); ctx.arc(x + (8 + i * 12) * k, y + h / 2, 2 * k, 0, Math.PI * 2); ctx.fill();
-    }
+    ctx.fillStyle = "rgba(255,255,255,0.18)";
+    ctx.fillRect(x + 3, bodyY + 3, Math.max(2, bodyW * 0.16), Math.max(4, bodyH - 6));
   }
 
   function drawPipe(p) {
-    const k = (p.gap || PIPE_GAP) / PIPE_GAP;
-    const lipH = PIPE_W * 0.22 * k, lipOver = PIPE_W * 0.05;
     const bottomY = p.top + (p.gap || PIPE_GAP);
-    drawRock(p.x, -2, PIPE_W, p.top - lipH + 2, p, false);
-    drawRock(p.x, bottomY + lipH, PIPE_W, GROUND_Y - bottomY - lipH, p, true);
-
-    // hanging seaweed on the top pillar
-    ctx.strokeStyle = "#3fae5a";
-    ctx.lineWidth = 3;
-    ctx.lineCap = "round";
-    for (let i = 0; i < 2; i++) {
-      const sx = p.x + 14 + i * 22;
-      ctx.beginPath();
-      ctx.moveTo(sx, p.top - lipH);
-      ctx.quadraticCurveTo(sx + Math.sin(frame / 15 + i) * 6, p.top - lipH + 10, sx + Math.sin(frame / 12 + i) * 4, p.top - lipH + 2);
-      ctx.stroke();
-    }
-
-    drawCoralLip(p.x - lipOver, p.top - lipH, PIPE_W + lipOver * 2, lipH, p.coral, 1, k);
-    drawCoralLip(p.x - lipOver, bottomY, PIPE_W + lipOver * 2, lipH, p.coral, -1, k);
+    drawStick(p.x, 0, p.top, p.bull, true);
+    drawStick(p.x, bottomY, Math.max(0, GROUND_Y - bottomY), p.bull, false);
   }
 
   function drawGround() {
-    const g = ctx.createLinearGradient(0, GROUND_Y, 0, H);
-    g.addColorStop(0, "#f2d48a");
-    g.addColorStop(1, "#c9a55c");
-    ctx.fillStyle = g;
+    ctx.fillStyle = "#050807";
     ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y);
-
-    // sand ripples
-    ctx.strokeStyle = "rgba(150,110,50,0.35)";
+    ctx.strokeStyle = "#1f8f5f";
     ctx.lineWidth = 2;
-    const off = ((groundX % 40) + 40) % 40;
-    for (let row = 0; row < 4; row++) {
-      ctx.beginPath();
-      for (let x = off - 40; x < W + 40; x += 40) {
-        const y = GROUND_Y + 22 + row * 22;
-        ctx.moveTo(x, y);
-        ctx.quadraticCurveTo(x + 10, y - 5, x + 20, y);
-        ctx.quadraticCurveTo(x + 30, y + 5, x + 40, y);
-      }
-      ctx.stroke();
-    }
-
-    // shells & starfish
-    const deco = ((groundX % 144) + 144) % 144;
-    for (let x = deco - 144; x < W + 144; x += 144) {
-      drawStar(x + 30, GROUND_Y + 40, 7);
-      drawShell(x + 100, GROUND_Y + 72);
-    }
-
-    ctx.fillStyle = "#3d2b1f";
-    ctx.fillRect(0, GROUND_Y - 1, W, 2);
-
-    // seaweed
-    ctx.lineCap = "round";
-    weeds.forEach((w) => {
-      ctx.strokeStyle = "#2f9e4f";
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.moveTo(w.x, GROUND_Y + 2);
-      const sway = Math.sin(frame / 20 + w.p) * 6;
-      ctx.quadraticCurveTo(w.x - sway, GROUND_Y - w.h / 2, w.x + sway, GROUND_Y - w.h);
-      ctx.stroke();
-    });
-  }
-
-  function drawStar(x, y, r) {
-    ctx.fillStyle = "#ff8a65";
-    ctx.strokeStyle = "#b54a2e";
-    ctx.lineWidth = 1.5;
     ctx.beginPath();
-    for (let i = 0; i < 10; i++) {
-      const a = -Math.PI / 2 + (i * Math.PI) / 5;
-      const rr = i % 2 === 0 ? r : r * 0.45;
-      ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
-    }
-    ctx.closePath();
-    ctx.fill(); ctx.stroke();
-  }
-
-  function drawShell(x, y) {
-    ctx.fillStyle = "#fff0e0";
-    ctx.strokeStyle = "#c4936a";
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.arc(x, y, 7, Math.PI, 0);
-    ctx.closePath();
-    ctx.fill(); ctx.stroke();
-    ctx.beginPath();
-    for (let i = -2; i <= 2; i++) { ctx.moveTo(x, y); ctx.lineTo(x + i * 3, y - 6); }
+    ctx.moveTo(0, GROUND_Y + 1);
+    ctx.lineTo(W, GROUND_Y + 1);
     ctx.stroke();
+
+    ctx.strokeStyle = "rgba(61,255,194,0.35)";
+    ctx.lineWidth = 1;
+    const tick = 28;
+    const off = (((-groundX) % tick) + tick) % tick;
+    for (let x = off - tick; x < W + tick; x += tick) {
+      ctx.beginPath();
+      ctx.moveTo(x, GROUND_Y);
+      ctx.lineTo(x, GROUND_Y + 7);
+      ctx.stroke();
+    }
   }
+
 
   function drawBubbles() {
-    ctx.strokeStyle = "rgba(255,255,255,0.7)";
-    ctx.lineWidth = 1;
     bubbles.forEach((b) => {
-      ctx.globalAlpha = Math.min(1, b.life / 30);
-      ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.stroke();
-      ctx.fillStyle = "rgba(255,255,255,0.5)";
-      ctx.beginPath(); ctx.arc(b.x - b.r * 0.35, b.y - b.r * 0.35, b.r * 0.3, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = Math.min(1, b.life / 30) * 0.85;
+      ctx.fillStyle = "#b8ffe8";
+      ctx.fillRect(b.x, b.y, 2.2, 2.2);
     });
     ctx.globalAlpha = 1;
   }
 
   function drawShark() {
-    const s = SKINS[skin];
     const alive = state === "ready" || state === "play";
     const dead = state === "dying" || state === "over";
-    const tailSwing = alive ? Math.sin(frame / 4) * 0.35 : 0;
-    const finFlap = alive ? Math.sin(frame / 3) : 0;
+    const tailSwing = alive ? Math.sin(frame / 4) * 0.28 : 0.12;
 
     ctx.save();
     ctx.translate(shark.x, shark.y);
     ctx.rotate(shark.rot);
-    ctx.scale(worldScale(), worldScale());
-    ctx.lineWidth = 1.5;
-    ctx.strokeStyle = "#1b2433";
+    ctx.scale(worldScale() * 0.72, worldScale() * 0.72);
     ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.strokeStyle = "#161616";
+    ctx.lineWidth = 1.6;
 
-    if (s.gear === "glow" || s.gear === "planet") {
-      ctx.shadowColor = s.gear === "glow" ? "#5fffe9" : "#d1b3ff";
-      ctx.shadowBlur = 14;
-    }
-
-    // tail fin
     ctx.save();
-    ctx.translate(-14, 0);
+    ctx.translate(-15, 0);
     ctx.rotate(tailSwing);
-    ctx.fillStyle = s.dark;
+    ctx.fillStyle = "#d5d5d5";
     ctx.beginPath();
     ctx.moveTo(2, 0);
-    ctx.lineTo(-10, -11);
-    ctx.quadraticCurveTo(-6, 0, -9, 9);
+    ctx.lineTo(-11, -10);
+    ctx.quadraticCurveTo(-5, 0, -10, 9);
     ctx.closePath();
-    ctx.fill(); ctx.stroke();
+    ctx.fill();
+    ctx.stroke();
     ctx.restore();
 
-    // dorsal fin
-    ctx.fillStyle = s.dark;
+    ctx.fillStyle = "#cfcfcf";
     ctx.beginPath();
-    ctx.moveTo(-6, -8);
-    ctx.quadraticCurveTo(-3, -20, 4, -19);
-    ctx.quadraticCurveTo(1, -13, 4, -8);
+    ctx.moveTo(-5, -7);
+    ctx.lineTo(-1, -18);
+    ctx.lineTo(7, -7);
     ctx.closePath();
-    ctx.fill(); ctx.stroke();
+    ctx.fill();
+    ctx.stroke();
 
-    // body
-    ctx.fillStyle = s.body;
+    ctx.fillStyle = "#f2f2f2";
     ctx.beginPath();
-    ctx.moveTo(-16, 0);
-    ctx.quadraticCurveTo(-8, -11, 6, -10);
-    ctx.quadraticCurveTo(18, -8, 19, 1);
-    ctx.quadraticCurveTo(17, 9, 4, 10);
-    ctx.quadraticCurveTo(-8, 10, -16, 0);
+    ctx.moveTo(-15, 0);
+    ctx.quadraticCurveTo(-6, -11, 8, -9);
+    ctx.quadraticCurveTo(20, -7, 21, 1);
+    ctx.quadraticCurveTo(18, 9, 2, 10);
+    ctx.quadraticCurveTo(-8, 10, -15, 0);
     ctx.closePath();
-    ctx.fill(); ctx.stroke();
-    ctx.shadowBlur = 0;
+    ctx.fill();
+    ctx.stroke();
 
-    // belly
-    ctx.fillStyle = s.belly;
+    ctx.fillStyle = "#ffffff";
     ctx.beginPath();
-    ctx.moveTo(-10, 3);
-    ctx.quadraticCurveTo(2, 11, 16, 4);
-    ctx.quadraticCurveTo(4, 7, -10, 3);
+    ctx.moveTo(-8, 2);
+    ctx.quadraticCurveTo(4, 10, 15, 3);
+    ctx.quadraticCurveTo(4, 6, -8, 2);
     ctx.fill();
 
-    // neon stripe
-    if (s.gear === "glow") {
-      ctx.strokeStyle = "#b6fff4";
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(-12, -1); ctx.quadraticCurveTo(0, -6, 14, -4);
-      ctx.stroke();
-      ctx.strokeStyle = "#1b2433";
-    } else if (s.gear === "planet") {
-      ctx.fillStyle = "#fff59d";
-      [[-8, -2], [1, 3], [7, -5]].forEach(([sx, sy]) => ctx.fillRect(sx, sy, 1.5, 1.5));
-    } else if (s.gear === "visor") {
-      ctx.strokeStyle = "#78909c";
-      ctx.beginPath();
-      ctx.moveTo(-10, -3); ctx.lineTo(-3, -3); ctx.lineTo(-5, 3);
-      ctx.stroke();
-      ctx.strokeStyle = "#1b2433";
-    } else if (s.gear === "crystal") {
-      ctx.fillStyle = "rgba(255,255,255,0.75)";
-      ctx.beginPath();
-      ctx.ellipse(-4, -4, 3.2, 1.2, -0.5, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // gills
-    ctx.strokeStyle = s.dark;
+    ctx.strokeStyle = "#7a7a7a";
     ctx.lineWidth = 1.2;
     for (let i = 0; i < 3; i++) {
       ctx.beginPath();
-      ctx.moveTo(-1 - i * 3, -3);
-      ctx.quadraticCurveTo(-3 - i * 3, 0, -1 - i * 3, 3);
+      ctx.moveTo(7 - i * 2.2, -1);
+      ctx.quadraticCurveTo(5.6 - i * 2.2, 1.2, 7 - i * 2.2, 3.2);
       ctx.stroke();
     }
-    ctx.strokeStyle = "#1b2433";
+
+    ctx.fillStyle = "#d0d0d0";
+    ctx.strokeStyle = "#161616";
     ctx.lineWidth = 1.5;
-
-    // pectoral fin
-    ctx.fillStyle = s.dark;
     ctx.beginPath();
-    ctx.moveTo(0, 5);
-    ctx.lineTo(-7, 12 + finFlap * 3);
-    ctx.lineTo(4, 8);
+    ctx.moveTo(1, 5);
+    ctx.lineTo(-6, 11);
+    ctx.lineTo(5, 7);
     ctx.closePath();
-    ctx.fill(); ctx.stroke();
+    ctx.fill();
+    ctx.stroke();
 
-    // mouth with teeth
-    ctx.fillStyle = "#7a1f2b";
+    ctx.fillStyle = "#f7f7f7";
     ctx.beginPath();
-    ctx.moveTo(8, 4);
-    ctx.quadraticCurveTo(13, 8, 18, 3);
-    ctx.lineTo(8, 4);
-    ctx.fill(); ctx.stroke();
+    ctx.moveTo(9, 3);
+    ctx.quadraticCurveTo(15, 7, 19, 2.2);
+    ctx.quadraticCurveTo(14, 4, 9, 3);
+    ctx.fill();
+    ctx.stroke();
     ctx.fillStyle = "#fff";
     for (let i = 0; i < 3; i++) {
-      const tx = 9.5 + i * 2.8;
+      const tx = 11 + i * 2.2;
       ctx.beginPath();
-      ctx.moveTo(tx, 3.8); ctx.lineTo(tx + 1.2, 6); ctx.lineTo(tx + 2.4, 3.6);
+      ctx.moveTo(tx, 2.4);
+      ctx.lineTo(tx + 0.8, 4.6);
+      ctx.lineTo(tx + 1.7, 2.3);
       ctx.fill();
     }
 
-    // eye
     if (dead) {
       ctx.strokeStyle = "#111";
-      ctx.lineWidth = 1.8;
+      ctx.lineWidth = 1.7;
       ctx.beginPath();
-      ctx.moveTo(8, -6); ctx.lineTo(13, -1);
-      ctx.moveTo(13, -6); ctx.lineTo(8, -1);
+      ctx.moveTo(10, -6); ctx.lineTo(15, -1.5);
+      ctx.moveTo(15, -6); ctx.lineTo(10, -1.5);
       ctx.stroke();
     } else {
-      ctx.fillStyle = "#fff";
-      ctx.beginPath(); ctx.arc(10.5, -3.5, 3.8, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       ctx.fillStyle = "#111";
-      ctx.beginPath(); ctx.arc(11.5, -3.5, 1.8, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = "#fff";
-      ctx.beginPath(); ctx.arc(12, -4.3, 0.6, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath();
+      ctx.arc(12.5, -3.2, 1.6, 0, Math.PI * 2);
+      ctx.fill();
     }
 
-    drawGear(s.gear, dead);
     ctx.restore();
   }
 
-  function drawGear(gear, dead) {
-    ctx.strokeStyle = "#1b2433";
-    ctx.lineWidth = 1.5;
-    if (gear === "goggles") {
-      ctx.strokeStyle = "#ffb300";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(-6, -7); ctx.quadraticCurveTo(2, -10, 7, -6);
-      ctx.stroke();
-      ctx.fillStyle = "rgba(160,230,255,0.45)";
-      ctx.strokeStyle = "#ffb300";
-      ctx.beginPath(); ctx.ellipse(10.5, -3.5, 5.5, 5, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-      // snorkel
-      ctx.strokeStyle = "#ff5252";
-      ctx.lineWidth = 2.5;
-      ctx.lineCap = "round";
-      ctx.beginPath();
-      ctx.moveTo(4, -8); ctx.lineTo(3, -17); ctx.lineTo(7, -18);
-      ctx.stroke();
-    } else if (gear === "headband") {
-      ctx.fillStyle = "#e53935";
-      ctx.beginPath();
-      ctx.moveTo(4, -10); ctx.lineTo(17, -6); ctx.lineTo(17, -2.5); ctx.lineTo(4, -6.5);
-      ctx.closePath();
-      ctx.fill(); ctx.stroke();
-      const flutter = state === "play" || state === "ready" ? Math.sin(frame / 3) * 3 : 4;
-      ctx.beginPath();
-      ctx.moveTo(4, -8);
-      ctx.lineTo(-6, -14 + flutter);
-      ctx.lineTo(-4, -10 + flutter);
-      ctx.closePath();
-      ctx.fill(); ctx.stroke();
-    } else if (gear === "crown") {
-      ctx.save();
-      ctx.translate(6, -10);
-      ctx.rotate(dead ? 0.6 : -0.15);
-      ctx.fillStyle = "#ffd54f";
-      ctx.beginPath();
-      ctx.moveTo(-5, 0); ctx.lineTo(-5, -6); ctx.lineTo(-2.5, -3);
-      ctx.lineTo(0, -8); ctx.lineTo(2.5, -3); ctx.lineTo(5, -6); ctx.lineTo(5, 0);
-      ctx.closePath();
-      ctx.fill(); ctx.stroke();
-      ctx.fillStyle = "#e53935";
-      ctx.beginPath(); ctx.arc(0, -2, 1.2, 0, Math.PI * 2); ctx.fill();
-      ctx.restore();
-    } else if (gear === "bandana") {
-      ctx.fillStyle = "#e53935";
-      ctx.beginPath();
-      ctx.moveTo(-1, -9); ctx.quadraticCurveTo(8, -15, 18, -6);
-      ctx.lineTo(16, -3); ctx.quadraticCurveTo(8, -9, 1, -6);
-      ctx.closePath();
-      ctx.fill(); ctx.stroke();
-      const flutter = state === "play" || state === "ready" ? Math.sin(frame / 3) * 2 : 2;
-      ctx.beginPath();
-      ctx.moveTo(-1, -8); ctx.lineTo(-8, -13 + flutter); ctx.lineTo(-5, -6);
-      ctx.closePath();
-      ctx.fill(); ctx.stroke();
-      ctx.fillStyle = "#1b2433";
-      ctx.beginPath();
-      ctx.ellipse(10.5, -3.5, 4.4, 3.5, -0.3, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(5, -7); ctx.lineTo(16, 1);
-      ctx.stroke();
-      ctx.fillStyle = "#ffd54f";
-      ctx.beginPath(); ctx.arc(16, 2, 1.1, 0, Math.PI * 2); ctx.fill();
-    } else if (gear === "visor") {
-      ctx.fillStyle = "#81d4fa";
-      ctx.strokeStyle = "#37474f";
-      ctx.beginPath();
-      ctx.rect(6.5, -7, 8.5, 6);
-      ctx.fill(); ctx.stroke();
-      ctx.strokeStyle = "#cfd8dc";
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(9, -11); ctx.lineTo(9, -16);
-      ctx.stroke();
-      ctx.fillStyle = frame % 28 < 14 ? "#ff5252" : "#69f0ae";
-      ctx.beginPath(); ctx.arc(9, -16.6, 1.5, 0, Math.PI * 2); ctx.fill();
-    } else if (gear === "flame") {
-      const flick = Math.sin(frame / 3);
-      ctx.strokeStyle = "#e65100";
-      for (let i = 0; i < 3; i++) {
-        const x = -4 + i * 4.5;
-        const h = (i === 1 ? 12 : 8) + flick * (i === 1 ? 2 : 1);
-        ctx.fillStyle = i === 1 ? "#fff176" : "#ff9800";
-        ctx.beginPath();
-        ctx.moveTo(x, -11);
-        ctx.quadraticCurveTo(x + 3, -11 - h, x + 6, -11);
-        ctx.quadraticCurveTo(x + 3, -15, x, -11);
-        ctx.fill(); ctx.stroke();
-      }
-    } else if (gear === "crystal") {
-      ctx.fillStyle = "#e0f7fa";
-      ctx.strokeStyle = "#00acc1";
-      ctx.beginPath();
-      ctx.moveTo(7, -10); ctx.lineTo(10, -19); ctx.lineTo(14, -10);
-      ctx.closePath();
-      ctx.fill(); ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(3, -9); ctx.lineTo(5.5, -15); ctx.lineTo(8, -9);
-      ctx.closePath();
-      ctx.fill(); ctx.stroke();
-    } else if (gear === "toque") {
-      ctx.fillStyle = "#fff";
-      ctx.beginPath();
-      ctx.ellipse(7, -15, 7, 4.5, 0, Math.PI, 0);
-      ctx.lineTo(14, -12); ctx.lineTo(0, -12);
-      ctx.closePath();
-      ctx.fill(); ctx.stroke();
-      ctx.fillRect(1.5, -13, 11, 4);
-      ctx.strokeRect(1.5, -13, 11, 4);
-    } else if (gear === "planet") {
-      ctx.fillStyle = "#7e57c2";
-      ctx.beginPath(); ctx.arc(8, -16, 3.3, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-      ctx.strokeStyle = "#ffe082";
-      ctx.beginPath(); ctx.ellipse(8, -16, 6.2, 2.1, 0.6, 0, Math.PI * 2); ctx.stroke();
-      ctx.strokeStyle = "#1b2433";
-    }
-  }
 
   function text(str, x, y, size, fill = "#fff", align = "center", stroke = "#0b2a3d") {
     ctx.font = `900 ${size}px "Segoe UI", Arial, sans-serif`;
@@ -1084,13 +780,13 @@
 
   function drawReady() {
     const ui = readyLayout();
-    text("StupidShark", W / 2, ui.title, 34, "#ffde59");
-    text("Get Ready!", W / 2, ui.ready, 24, "#7ef0d0");
-    text(SKINS[skin].name, W / 2, ui.name, 14, "#fff");
+    text("StupidShark", W / 2, ui.title, 32, "#f4fff9", "center", "#04110c");
+    text("Get Ready", W / 2, ui.ready, 22, "#3dffc2", "center", "#04110c");
+    text("Ride the chart", W / 2, ui.name, 14, "#9fb8ae", "center", "#04110c");
 
     const y = ui.tap + Math.sin(frame / 10) * 3;
-    roundRect(W / 2 - 50, y - 20, 100, 40, 10, "rgba(255,255,255,0.8)", "#0b2a3d");
-    text("TAP", W / 2, y, 20, "#ff7043", "center", "#fff");
+    roundRect(W / 2 - 50, y - 20, 100, 40, 10, "#12382c", "#3dffc2");
+    text("TAP", W / 2, y, 20, "#e9fff6", "center", "#04110c");
     ctx.fillStyle = "#fff";
     ctx.beginPath();
     ctx.moveTo(W / 2, y - 34); ctx.lineTo(W / 2 - 8, y - 24); ctx.lineTo(W / 2 + 8, y - 24); ctx.closePath();
@@ -1099,7 +795,7 @@
   }
 
   function medalFor(s) {
-    if (s >= 40) return { name: "Mutiara", c1: "#f5f0ff", c2: "#b9a8d9" };
+    if (s >= 40) return { name: "Diamond", c1: "#e8fff6", c2: "#1f8f5f" };
     if (s >= 30) return { name: "Gold", c1: "#ffd54f", c2: "#c79100" };
     if (s >= 20) return { name: "Silver", c1: "#e0e0e0", c2: "#8e8e8e" };
     if (s >= 10) return { name: "Bronze", c1: "#e0a060", c2: "#8d5524" };
@@ -1113,17 +809,17 @@
     const tall = H > BASE_H + 8;
     const titleY = tall ? GROUND_Y * 0.22 : 120;
     const py = (tall ? GROUND_Y * 0.36 : 170) + (1 - ease) * (tall ? 80 : 300);
-    text("Game Over", W / 2, titleY - (1 - ease) * 30, 36, "#ff8a3d");
+    text("Game Over", W / 2, titleY - (1 - ease) * 30, 36, "#e0a15a", "center", "#04110c");
     const panelW = Math.min(W - 80, 360);
     const panelX = (W - panelW) / 2;
-    roundRect(panelX, py, panelW, 116, 8, "#e9f7fb", "#0b2a3d");
-    roundRect(panelX + 6, py + 6, panelW - 12, 104, 6, null, "#8fc9dc");
+    roundRect(panelX, py, panelW, 116, 8, "#101614", "#1f8f5f");
+    roundRect(panelX + 6, py + 6, panelW - 12, 104, 6, null, "#2a4a3c");
 
     const medalX = panelX + 52;
     const scoreX = panelX + panelW - 24;
-    text("MEDAL", medalX, py + 22, 12, "#1a8fb8", "center", "#fff");
-    text("SCORE", scoreX, py + 22, 12, "#1a8fb8", "center", "#fff");
-    text("BEST", scoreX, py + 66, 12, "#1a8fb8", "center", "#fff");
+    text("MEDAL", medalX, py + 22, 12, "#7dcea0", "center", "#04110c");
+    text("SCORE", scoreX, py + 22, 12, "#7dcea0", "center", "#04110c");
+    text("BEST", scoreX, py + 66, 12, "#7dcea0", "center", "#04110c");
 
     const shown = overTimer > 25 ? Math.min(score, Math.floor((overTimer - 25) / 2)) : 0;
     text(String(shown), scoreX, py + 44, 22);
@@ -1153,9 +849,9 @@
     }
 
     if (overTimer >= 40) {
-      roundRect(okBtn.x, okBtn.y, okBtn.w, okBtn.h, 6, "#fff", "#0b2a3d");
-      roundRect(okBtn.x + 3, okBtn.y + 3, okBtn.w - 6, okBtn.h - 6, 4, "#1a8fb8");
-      text("PLAY", W / 2, okBtn.y + okBtn.h / 2 + 1, 18, "#fff", "center", "#0b2a3d");
+      roundRect(okBtn.x, okBtn.y, okBtn.w, okBtn.h, 6, "#0d241c", "#1f8f5f");
+      roundRect(okBtn.x + 3, okBtn.y + 3, okBtn.w - 6, okBtn.h - 6, 4, "#1b6b45");
+      text("PLAY", W / 2, okBtn.y + okBtn.h / 2 + 1, 18, "#f4fff9", "center", "#04110c");
     }
   }
 
@@ -1170,7 +866,7 @@
     drawShark();
 
     if (state === "play" || state === "dying") {
-      text(String(score), W / 2, H * 0.11, Math.round(52 * worldScale()), "#fff", "center", "#000");
+      text(String(score), W / 2, H * 0.11, Math.round(52 * worldScale()), "#f4fff9", "center", "#04110c");
     }
     if (state === "ready") drawReady();
     if (state === "over") drawOver();
