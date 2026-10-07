@@ -216,8 +216,13 @@
       });
     },
     hit() {
-      this.burst(0.28, 0.16);
-      this.synth(() => this.tone("triangle", 240, 0, 0.22, 0.18, 70));
+      this.synth(() => {
+        this.tone("sine", 150, 0, 0.16, 0.32, 55);
+        this.tone("triangle", 523, 0.14, 0.14, 0.12);
+        this.tone("triangle", 392, 0.28, 0.14, 0.12);
+        this.tone("triangle", 311, 0.42, 0.14, 0.12);
+        this.tone("triangle", 262, 0.56, 0.42, 0.13);
+      });
     },
     swoosh() { this.burst(0.2, 0.14); },
   };
